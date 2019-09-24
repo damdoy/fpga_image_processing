@@ -1,11 +1,12 @@
 #include <cstdio>
 #include <queue>
 
-#include "image_fruits.h"
+// #include "image_fruits_128.h"
+#include "image_fruits_64.h"
 // #include "image_fruits_8.h"
 // #include "image_sequential.h"
 
-#include "../obj_dir/Vcontroller.h"
+#include "../obj_dir/Vimage_processing.h"
 
 #define SIZE_IMAGE 8
 
@@ -31,8 +32,9 @@ typedef std::queue<Operation> FIFO_OP;
 
 std::queue<uint16_t> fifo_out;
 
-
-void main_loop_clk(Vcontroller *tb, FIFO_OP *fifo){
+//simulates the I/O of the fpga controller
+//ram and "communication" (which should be SPI)
+void main_loop_clk(Vimage_processing *tb, FIFO_OP *fifo){
    tb->clk = 0;
    tb->reset = 0;
    tb->eval();
@@ -70,7 +72,7 @@ void main_loop_clk(Vcontroller *tb, FIFO_OP *fifo){
    tb->eval();
 }
 
-bool send_params(Vcontroller *tb, uint16_t img_width16, uint16_t img_height16, FIFO_OP *fifo){
+bool send_params(Vimage_processing *tb, uint16_t img_width16, uint16_t img_height16, FIFO_OP *fifo){
    uint8_t img_width8[2] = {img_width16&0xFF, (img_width16>>8)&0xFF};
    uint8_t img_height8[2] = {img_height16&0xFF, (img_height16>>8)&0xFF};
 
@@ -86,11 +88,9 @@ bool send_params(Vcontroller *tb, uint16_t img_width16, uint16_t img_height16, F
    for (size_t i = 0; i < 5; i++) {
       main_loop_clk(tb, fifo);
    }
-
-   // tb->comm_data_in_valid = 0;
 }
 
-void read_status(Vcontroller *tb, FIFO_OP *fifo){
+void read_status(Vimage_processing *tb, FIFO_OP *fifo){
    fifo->push(Operation(true, COMMAND_GET_STATUS, 0));
 
    for (size_t i = 0; i < 6; i++) {
@@ -103,7 +103,8 @@ void read_status(Vcontroller *tb, FIFO_OP *fifo){
    }
 }
 
-void send_image(Vcontroller *tb, FIFO_OP *fifo){
+//sends a sequential image (each pixel is the increment of the previous one)
+void send_image(Vimage_processing *tb, FIFO_OP *fifo){
    fifo->push(Operation(true, COMMAND_SEND_IMG, 0));
    for (size_t i = 0; i < SIZE_IMAGE*SIZE_IMAGE; i++) {
       fifo->push(Operation(false, COMMAND_NONE, i+1));
@@ -114,7 +115,7 @@ void send_image(Vcontroller *tb, FIFO_OP *fifo){
    }
 }
 
-void send_image(Vcontroller *tb, FIFO_OP *fifo, uint8_t *image){
+void send_image(Vimage_processing *tb, FIFO_OP *fifo, uint8_t *image){
    fifo->push(Operation(true, COMMAND_SEND_IMG, 0));
    for (size_t i = 0; i < image_width*image_height; i++) {
       fifo->push(Operation(false, COMMAND_NONE, image[i]));
@@ -125,7 +126,7 @@ void send_image(Vcontroller *tb, FIFO_OP *fifo, uint8_t *image){
    }
 }
 
-void send_image_add(Vcontroller *tb, int16_t add_value16, bool clamp, FIFO_OP *fifo){
+void send_image_add(Vimage_processing *tb, int16_t add_value16, bool clamp, FIFO_OP *fifo){
 
    uint8_t add_value8[2] = {add_value16&0xFF, (add_value16>>8)&0xFF};
 
@@ -139,7 +140,7 @@ void send_image_add(Vcontroller *tb, int16_t add_value16, bool clamp, FIFO_OP *f
    }
 }
 
-void send_image_threshold(Vcontroller *tb, uint8_t threshold_value, uint8_t replacement_value, bool upper_selection, FIFO_OP *fifo){
+void send_image_threshold(Vimage_processing *tb, uint8_t threshold_value, uint8_t replacement_value, bool upper_selection, FIFO_OP *fifo){
 
    fifo->push(Operation(true, COMMAND_APPLY_THRESHOLD, 0));
    fifo->push(Operation(false, COMMAND_NONE, threshold_value));
@@ -151,7 +152,7 @@ void send_image_threshold(Vcontroller *tb, uint8_t threshold_value, uint8_t repl
    }
 }
 
-void send_image_invert(Vcontroller *tb, FIFO_OP *fifo){
+void send_image_invert(Vimage_processing *tb, FIFO_OP *fifo){
 
    fifo->push(Operation(true, COMMAND_APPLY_INVERT, 0));
 
@@ -160,7 +161,7 @@ void send_image_invert(Vcontroller *tb, FIFO_OP *fifo){
    }
 }
 
-void send_pow(Vcontroller *tb, FIFO_OP *fifo){
+void send_pow(Vimage_processing *tb, FIFO_OP *fifo){
    fifo->push(Operation(true, COMMAND_APPLY_POW, 0));
 
    for (size_t i = 0; i < 10; i++) {
@@ -168,7 +169,7 @@ void send_pow(Vcontroller *tb, FIFO_OP *fifo){
    }
 }
 
-void send_sqrt(Vcontroller *tb, FIFO_OP *fifo){
+void send_sqrt(Vimage_processing *tb, FIFO_OP *fifo){
    fifo->push(Operation(true, COMMAND_APPLY_SQRT, 0));
 
    for (size_t i = 0; i < 10; i++) {
@@ -176,7 +177,7 @@ void send_sqrt(Vcontroller *tb, FIFO_OP *fifo){
    }
 }
 
-void read_image(Vcontroller *tb, FIFO_OP *fifo){
+void read_image(Vimage_processing *tb, FIFO_OP *fifo){
 
    fifo->push(Operation(true, COMMAND_READ_IMG, 0));
 
@@ -192,7 +193,7 @@ void read_image(Vcontroller *tb, FIFO_OP *fifo){
    }
 }
 
-void read_image(Vcontroller *tb, FIFO_OP *fifo, uint8_t* image_out){
+void read_image(Vimage_processing *tb, FIFO_OP *fifo, uint8_t* image_out){
 
    fifo->push(Operation(true, COMMAND_READ_IMG, 0));
 
@@ -209,7 +210,7 @@ void read_image(Vcontroller *tb, FIFO_OP *fifo, uint8_t* image_out){
    }
 }
 
-void switch_buffers(Vcontroller *tb, FIFO_OP *fifo){
+void switch_buffers(Vimage_processing *tb, FIFO_OP *fifo){
    fifo->push(Operation(true, COMMAND_SWITCH_BUFFERS, 0));
 
    for (size_t i = 0; i < 10; i++) {
@@ -217,7 +218,8 @@ void switch_buffers(Vcontroller *tb, FIFO_OP *fifo){
    }
 }
 
-void send_binary_add(Vcontroller *tb, bool clamp, FIFO_OP *fifo){
+//will add the input buffer with the storage buffer
+void send_binary_add(Vimage_processing *tb, bool clamp, FIFO_OP *fifo){
    fifo->push(Operation(true, COMMAND_BINARY_ADD, 0));
    fifo->push(Operation(false, COMMAND_NONE, clamp));
 
@@ -226,7 +228,8 @@ void send_binary_add(Vcontroller *tb, bool clamp, FIFO_OP *fifo){
    }
 }
 
-void wait_end_busy(Vcontroller *tb, FIFO_OP *fifo){
+//loop until not busy
+void wait_end_busy(Vimage_processing *tb, FIFO_OP *fifo){
 
    uint8_t status_out[4];
 
@@ -246,10 +249,10 @@ void wait_end_busy(Vcontroller *tb, FIFO_OP *fifo){
    } while( (status_out[0]&0x01 == 1) );
 }
 
-void send_convolution(Vcontroller *tb, FIFO_OP *fifo, uint8_t *conv_kernel, bool clamp, bool input_source){
+void send_convolution(Vimage_processing *tb, FIFO_OP *fifo, uint8_t *conv_kernel, bool clamp, bool input_source, bool add_to_output){
    fifo->push(Operation(true, COMMAND_CONVOLUTION, 0));
    //parameters
-   fifo->push(Operation(false, COMMAND_NONE, (input_source<<1)+clamp));
+   fifo->push(Operation(false, COMMAND_NONE, (add_to_output<<2)+(input_source<<1)+clamp));
 
    for (size_t i = 0; i < 9; i++) {
       fifo->push(Operation(false, COMMAND_NONE, conv_kernel[i]));
@@ -260,97 +263,62 @@ void send_convolution(Vcontroller *tb, FIFO_OP *fifo, uint8_t *conv_kernel, bool
    }
 }
 
-void test1(Vcontroller *tb, FIFO_OP *fifo_commands){
-   send_params(tb, SIZE_IMAGE, SIZE_IMAGE, fifo_commands);
+void send_clear(Vimage_processing *tb, FIFO_OP *fifo, uint8_t value){
+
+   //everything >= 0 will be replaced with "value"
+   send_image_threshold(tb, 0, value, false, fifo);
+}
+
+void test_add_threshold(Vimage_processing *tb, FIFO_OP *fifo_commands, uint8_t *image_input, uint8_t *image_output){
+   send_params(tb, image_width, image_height, fifo_commands);
 
    read_status(tb, fifo_commands);
 
-   send_image(tb, fifo_commands);
+   send_image(tb, fifo_commands, image_input);
 
    read_status(tb, fifo_commands);
    printf("===========ADD===========\n");
    switch_buffers(tb, fifo_commands);
-   send_image_add(tb, 1, true, fifo_commands);
+   send_image_add(tb, 32, true, fifo_commands);
+   wait_end_busy(tb, fifo_commands);
 
-   switch_buffers(tb, fifo_commands);
-   read_image(tb, fifo_commands);
-   switch_buffers(tb, fifo_commands);
    printf("===========THRESHOLD===========\n");
-   send_image_threshold(tb, 32, 0, 0, fifo_commands);
+   send_image_threshold(tb, 168, 0, 0, fifo_commands);
+   wait_end_busy(tb, fifo_commands);
 
    switch_buffers(tb, fifo_commands);
-   read_image(tb, fifo_commands);
+   read_image(tb, fifo_commands, image_output);
 }
 
-void test2(Vcontroller *tb, FIFO_OP *fifo_commands){
-   //load image in input buffer, apply add, switch buffer load other image, threshold, switch, read, switch read
-   send_params(tb, SIZE_IMAGE, SIZE_IMAGE, fifo_commands);
-   send_image(tb, fifo_commands);
-   switch_buffers(tb, fifo_commands);
-   send_image_add(tb, 16, true, fifo_commands);
-
-   send_image(tb, fifo_commands);
-   switch_buffers(tb, fifo_commands);
-   send_image_threshold(tb, 32, 128, 1, fifo_commands);
-
-   read_image(tb, fifo_commands);
-   switch_buffers(tb, fifo_commands);
-   read_image(tb, fifo_commands);
-
-}
-
-void test3(Vcontroller *tb, FIFO_OP *fifo_commands){
-   send_params(tb, SIZE_IMAGE, SIZE_IMAGE, fifo_commands);
-   send_image(tb, fifo_commands);
-   switch_buffers(tb, fifo_commands);
-   send_image_add(tb, 16, true, fifo_commands);
-
-
-   send_image(tb, fifo_commands);
-   switch_buffers(tb, fifo_commands);
-   send_image_threshold(tb, 32, 128, 1, fifo_commands);
-
-   send_binary_add(tb, true, fifo_commands);
-
-   switch_buffers(tb, fifo_commands);
-   read_image(tb, fifo_commands);
-   // switch_buffers(tb, fifo_commands);
-   // read_image(tb, fifo_commands);
-}
-
-void test4(Vcontroller *tb, FIFO_OP *fifo_commands, uint8_t *image_input, uint8_t *image_output){
+//will load the image in the input buffer and set the storage buffer to pixels of value 32
+// and then will add the two buffers
+void test_binary_add(Vimage_processing *tb, FIFO_OP *fifo_commands, uint8_t *image_input, uint8_t *image_output){
    send_params(tb, image_width, image_height, fifo_commands);
-   send_image(tb, fifo_commands, image_input);
+   send_image(tb, fifo_commands, image_input); //in input buffer
 
-   switch_buffers(tb, fifo_commands);
-
-   // send_image_threshold(tb, 128, 255, 1, fifo_commands);
-   send_image_add(tb, -128, true, fifo_commands);
-   // send_image_invert(tb, fifo_commands);
-
+   send_clear(tb, fifo_commands, 32); //storage buffer will have an image full of pixels 32
    wait_end_busy(tb, fifo_commands);
 
    switch_buffers(tb, fifo_commands);
 
+   send_binary_add(tb, true, fifo_commands);
+   wait_end_busy(tb, fifo_commands);
+
+   switch_buffers(tb, fifo_commands);
    read_image(tb, fifo_commands, image_output);
+
 }
 
-void test_convolution(Vcontroller *tb, FIFO_OP *fifo_commands, uint8_t *image_input, uint8_t *image_output){
+void test_gaussian_blur(Vimage_processing *tb, FIFO_OP *fifo_commands, uint8_t *image_input, uint8_t *image_output){
    send_params(tb, image_width, image_height, fifo_commands);
    send_image(tb, fifo_commands, image_input);
 
-   // switch_buffers(tb, fifo_commands);
-
-   // send_image_threshold(tb, 128, 255, 1, fifo_commands);
-   // send_image_add(tb, -128, true, fifo_commands);
-   // send_image_invert(tb, fifo_commands);
-
-   //gaussian blur
-   // uint8_t conv_kernel[9] = {(1)<<0, (1)<<1, (1)<<0, (1)<<1, ((1)<<2), (1)<<1,  (1)<<0, (1)<<1, (1)<<0};
+   //gaussian blur kernel
    uint8_t conv_kernel[9] = {(1)<<0, (1)<<1, (1)<<0, (1)<<1, ((1)<<2), (1)<<1,  (1)<<0, (1)<<1, (1)<<0};
 
-   send_convolution(tb, fifo_commands, conv_kernel, true, true);
-   // send_image_add(tb, 0, true, fifo_commands);
+   // uint8_t conv_kernel[9] = {(1)<<4, (1)<<4, (1)<<4, (1)<<4, ((-7)<<4), (1)<<4,  (1)<<4, (1)<<4, (1)<<4};
+
+   send_convolution(tb, fifo_commands, conv_kernel, true, true, false);
 
    printf("wait end busy\n");
 
@@ -363,16 +331,51 @@ void test_convolution(Vcontroller *tb, FIFO_OP *fifo_commands, uint8_t *image_in
    read_image(tb, fifo_commands, image_output);
 }
 
+void test_sobel_simple(Vimage_processing *tb, FIFO_OP *fifo_commands, uint8_t *image_input, uint8_t *image_output){
+   send_params(tb, image_width, image_height, fifo_commands);
+   send_image(tb, fifo_commands, image_input);
+
+   //top sobel
+   {
+      uint8_t conv_kernel[9] = {(1)<<3, (1)<<4, (1)<<3, (0)<<4, ((0)<<4), (0)<<4,  (-1)<<3, (-1)<<4, (-1)<<3};
+      send_convolution(tb, fifo_commands, conv_kernel, true, true, true);
+   }
+   wait_end_busy(tb, fifo_commands);
+
+   //bottom sobel
+   {
+      uint8_t conv_kernel[9] = {(-1)<<3, (-1)<<4, (-1)<<3, (0)<<4, ((0)<<4), (0)<<4,  (1)<<3, (1)<<4, (1)<<3};
+      send_convolution(tb, fifo_commands, conv_kernel, true, true, true);
+   }
+   wait_end_busy(tb, fifo_commands);
+
+   //left sobel
+   {
+      uint8_t conv_kernel[9] = {(1)<<3, (0)<<4, (-1)<<3, (1)<<4, ((0)<<4), (-1)<<4,  (1)<<3, (0)<<4, (-1)<<3};
+      send_convolution(tb, fifo_commands, conv_kernel, true, true, true);
+   }
+   wait_end_busy(tb, fifo_commands);
+
+   //right sobel
+   {
+      uint8_t conv_kernel[9] = {(-1)<<3, (0)<<4, (1)<<3, (-1)<<4, ((0)<<4), (1)<<4,  (-1)<<3, (0)<<4, (1)<<3};
+      send_convolution(tb, fifo_commands, conv_kernel, true, true, true);
+   }
+   wait_end_busy(tb, fifo_commands);
+
+   switch_buffers(tb, fifo_commands);
+
+   read_image(tb, fifo_commands, image_output);
+}
+
 int main(){
-   // Initialize Verilators variables
-   // Verilated::commandArgs(argc, argv);
 
    FIFO_OP fifo_commands;
    FILE *output_file;
    output_file = fopen("output.dat", "w");
 
    // Create an instance of our module under test
-   Vcontroller *tb = new Vcontroller;
+   Vimage_processing *tb = new Vimage_processing;
 
    uint8_t *image_input = new uint8_t[image_width*image_height];
    uint8_t *image_output = new uint8_t[image_width*image_height];
@@ -384,11 +387,11 @@ int main(){
       image_input[i] = pixel[0];
    }
 
-   // test1(tb, &fifo_commands);
-   // test2(tb, &fifo_commands);
-   // test3(tb, &fifo_commands);
-   // test4(tb, &fifo_commands, image_input, image_output);
-   test_convolution(tb, &fifo_commands, image_input, image_output);
+   //test selection
+   // test_add_threshold(tb, &fifo_commands, image_input, image_output);
+   // test_binary_add(tb, &fifo_commands, image_input, image_output);
+   test_gaussian_blur(tb, &fifo_commands, image_input, image_output);
+   // test_sobel_simple(tb, &fifo_commands, image_input, image_output);
 
    for (size_t i = 0; i < image_height*image_width; i++) {
       fprintf(output_file, "%d ", image_output[i]);

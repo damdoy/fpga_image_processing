@@ -43,7 +43,7 @@ The images are stored in a .h (done with gimp).
 
 # Build & run
 
-`./build.sh` Builds the simulation and C program
+`./build_simulation.sh` Builds the simulation and C program
 
 `./simu` Runs simulator
 

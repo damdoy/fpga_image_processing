@@ -1,6 +1,6 @@
 /* verilator lint_off UNUSED */
 
-module controller(
+module image_processing(
 clk, reset,
 
 //memory access
@@ -85,6 +85,9 @@ reg [15:0] convolution_previous_read_counter_x[1:0];
 reg [15:0] convolution_previous_read_counter_y[1:0];
 reg [7:0] convolution_last_calculation;
 
+reg [1:0] convolution_reading_data;
+reg [15:0] convolution_data_to_add;
+
 //params
 reg [15:0] img_width;
 reg [15:0] img_height;
@@ -92,6 +95,7 @@ reg [15:0] img_height;
 reg [15:0] add_value;
 reg clamp;
 reg convolution_source_input;
+reg convolution_add_to_result;
 
 reg [7:0] threshold_value;
 reg [7:0] threshold_replacement;
@@ -393,6 +397,7 @@ begin
             convolution_params <= comm_data_in;
             clamp <= comm_data_in[0];
             convolution_source_input <= comm_data_in[1];
+            convolution_add_to_result <= comm_data_in[2];
             counter_read <= 8;
          end else begin //the kernel matrix (3x3)
             //sign extend the 8bits values into 16bits
@@ -407,6 +412,7 @@ begin
                counter_convolution_y <= 0;
                counter_convolution_x_write <= 0;
                counter_convolution_y_write <= 0;
+               convolution_reading_data <= 2'b00;
                if(convolution_source_input == 1) begin //input buffer used as source for convolution
                   proc_conv_memory_addr_read <= buffer_input_address;
                end else begin
@@ -463,17 +469,17 @@ begin
             end else if(processing_command == COMMAND_APPLY_THRESHOLD) begin
                data_write <= data_read;
                if(threshold_upper == 1) begin
-                  if(data_read[7:0] > threshold_value) begin
+                  if(data_read[7:0] >= threshold_value) begin
                      data_write[7:0] <= threshold_replacement;
                   end
-                  if(data_read[15:8] > threshold_value) begin
+                  if(data_read[15:8] >= threshold_value) begin
                      data_write[15:8] <= threshold_replacement;
                   end
                end else begin
-                  if(data_read[7:0] < threshold_value) begin
+                  if(data_read[7:0] <= threshold_value) begin
                      data_write[7:0] <= threshold_replacement;
                   end
-                  if(data_read[15:8] < threshold_value) begin
+                  if(data_read[15:8] <= threshold_value) begin
                      data_write[15:8] <= threshold_replacement;
                   end
                end
@@ -548,12 +554,28 @@ begin
    end
    STATE_PROC_CONVOLUTION: begin
       reg [15:0] temp_calc; //used for calculations
-      if(proc_conv_memory_addr_read[0] == 1'b0) begin //read the data
+
+      if(convolution_add_to_result == 1 && convolution_reading_data != 2'b10) begin
+         if(convolution_reading_data == 2'b00) begin
+            rd_en <= 1;
+            addr <= proc_conv_memory_addr_write;
+            convolution_reading_data <= 2'b01;
+         end else if(convolution_reading_data == 2'b01 && data_read_valid == 1) begin
+            convolution_data_to_add <= data_read;
+            convolution_reading_data <= 2'b10;
+         end
+      end else if(proc_conv_memory_addr_read[0] == 1'b0) begin //read the data
          rd_en <= 1;
          addr <= proc_conv_memory_addr_read;
          proc_conv_memory_addr_read <= proc_conv_memory_addr_read + 1;
          binary_read_buffer <= 1;
+
+
+         if(convolution_add_to_result == 0) begin
+            convolution_data_to_add <= 16'b0;
+         end
       end else if (data_read_valid == 1) begin
+
          //keep the current read in a buffer before putting it in the convolution buffer because we read data 2 by 2 and we need 3x3 matrices
          convolution_previous_read[0] <= data_read;
          convolution_previous_read_counter_x[0] <= counter_convolution_x;
@@ -610,7 +632,9 @@ begin
             temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_previous_read[0][7:0]};
             temp_calc = temp_calc + convolution_matrix[8]*{8'b0, convolution_previous_read[0][15:8]};
 
-            data_write[7:0] <= apply_clamp_fixed16(temp_calc, clamp);
+            temp_calc[7:0] = apply_clamp_fixed16(temp_calc, clamp);
+            //convolution_data_to_add is either the value already existing at this address, or 0 (depends on param)
+            data_write[7:0] <= apply_clamp({8'b0, convolution_data_to_add[7:0]}+{8'b0, temp_calc[7:0]}, 1);
          end
 
          if(counter_convolution_y_write == 0 || counter_convolution_y_write >= img_height-1 || counter_convolution_x_write >= img_width-2) begin
@@ -624,15 +648,20 @@ begin
             temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0])]};
             temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0])]};
             temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0])]};
+            //last line not in buffer
             temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_previous_read[0][7:0]};
             temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_previous_read[0][15:8]};
             temp_calc = temp_calc + convolution_matrix[8]*{8'b0, data_read[7:0]};
-            data_write[15:8] <= apply_clamp_fixed16(temp_calc, clamp);
+
+            temp_calc[7:0] = apply_clamp_fixed16(temp_calc, clamp);
+            data_write[15:8] <= apply_clamp({8'b0, convolution_data_to_add[15:8]}+{8'b0, temp_calc[7:0]}, 1);
 
          end
 
          //will cause the next read
          proc_conv_memory_addr_read <= proc_conv_memory_addr_read + 1;
+
+         convolution_reading_data <= 2'b00;
 
          //end condition
          if(counter_convolution_y >= img_height+1 && counter_convolution_x+2 >= img_width)begin
