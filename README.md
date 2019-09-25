@@ -23,14 +23,22 @@ The images are stored in a .h (done with gimp).
    - add/sub
    - invert
    - threshold
-   - pow2
-   - sqrt
+   - mult/div
 - 3x3 matrix convolution
 - combine input and buffer
    - add
    - sub
    - mult
 -- switch input and buffer
+
+### fixed points
+
+Operations such as multiplication or convolutions require real numbers. For example the gaussian blur
+is implemented using a kernel whose sum is one, so each element of the kernel should be <= 1.0.
+
+Real numbers are represented as fixed point numbers on 8 bits.
+The first bit is used as the sign bit, 3 bits for the numbers and 4 for the fractions.
+This means the values can go from -7.0 to 7.0 with a precision of 0.0625 (1/2^4).
 
 ### Commands
 - format: command+data_to_receive-data_to_send

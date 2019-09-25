@@ -28,16 +28,30 @@ input wire comm_data_in_valid;
 output reg [7:0] comm_data_out;
 output reg comm_data_out_valid;
 
-
 parameter STATE_IDLE = 0, STATE_WAIT_COMMAND = STATE_IDLE+1, STATE_READ_COMMAND_PARAM_WIDTH=STATE_WAIT_COMMAND+1,
           STATE_READ_COMMAND_PARAM_HEIGHT = STATE_READ_COMMAND_PARAM_WIDTH+1, STATE_SEND_IMG = STATE_READ_COMMAND_PARAM_HEIGHT+1,
-          STATE_READ_IMG = STATE_SEND_IMG+1, STATE_GET_STATUS = STATE_READ_IMG+1, STATE_APPLY_ADD_READ_PARAM = STATE_GET_STATUS+1, STATE_APPLY_ADD = STATE_APPLY_ADD_READ_PARAM+1,
+          STATE_READ_IMG = STATE_SEND_IMG+1, STATE_GET_STATUS = STATE_READ_IMG+1,
+          STATE_APPLY_ADD_READ_PARAM = STATE_GET_STATUS+1, STATE_APPLY_ADD = STATE_APPLY_ADD_READ_PARAM+1,
           STATE_THRESHOLD_READ_PARAM = STATE_APPLY_ADD+1, STATE_PROC_THRESHOLD = STATE_THRESHOLD_READ_PARAM+1,
           STATE_BINARY_ADD_READ_PARAM = STATE_PROC_THRESHOLD+1, STATE_PROC_BINARY = STATE_BINARY_ADD_READ_PARAM+1,
           STATE_APPLY_INVERT_READ_PARAM = STATE_PROC_BINARY+1, STATE_PROC_UNARY = STATE_APPLY_INVERT_READ_PARAM+1,
           STATE_APPLY_POW_READ_PARAM = STATE_PROC_UNARY+1,
           STATE_CONVOLUTION_READ_PARAM = STATE_APPLY_POW_READ_PARAM+1, STATE_PROC_CONVOLUTION = STATE_CONVOLUTION_READ_PARAM+1,
-          STATE_BINARY_SUB_READ_PARAM = STATE_PROC_CONVOLUTION+1, STATE_BINARY_MULT_READ_PARAM = STATE_BINARY_SUB_READ_PARAM+1;
+          STATE_BINARY_SUB_READ_PARAM = STATE_PROC_CONVOLUTION+1, STATE_BINARY_MULT_READ_PARAM = STATE_BINARY_SUB_READ_PARAM+1,
+          STATE_APPLY_MULT_READ_PARAM = STATE_BINARY_MULT_READ_PARAM+1, STATE_APPLY_MULT = STATE_APPLY_MULT_READ_PARAM+1;
+
+//only works in systemverilog
+// enum bit [7:0] {STATE_IDLE, STATE_WAIT_COMMAND, STATE_READ_COMMAND_PARAM_WIDTH,
+//           STATE_READ_COMMAND_PARAM_HEIGHT, STATE_SEND_IMG,
+//           STATE_READ_IMG, STATE_GET_STATUS, STATE_APPLY_ADD_READ_PARAM, STATE_APPLY_ADD,
+//           STATE_THRESHOLD_READ_PARAM, STATE_PROC_THRESHOLD,
+//           STATE_BINARY_ADD_READ_PARAM, STATE_PROC_BINARY,
+//           STATE_APPLY_INVERT_READ_PARAM, STATE_PROC_UNARY,
+//           STATE_APPLY_POW_READ_PARAM,
+//           STATE_CONVOLUTION_READ_PARAM, STATE_PROC_CONVOLUTION,
+//           STATE_BINARY_SUB_READ_PARAM, STATE_BINARY_MULT_READ_PARAM,
+//           STATE_APPLY_MULT_READ_PARAM, STATE_APPLY_MULT} States;
+
 reg [7:0] state;
 
 reg [7:0] state_processing;
@@ -48,7 +62,16 @@ parameter COMMAND_PARAM = 0, COMMAND_SEND_IMG = COMMAND_PARAM+1, COMMAND_READ_IM
           COMMAND_GET_STATUS = COMMAND_READ_IMG+1, COMMAND_APPLY_ADD = COMMAND_GET_STATUS+1, COMMAND_APPLY_THRESHOLD = COMMAND_APPLY_ADD+1,
           COMMAND_SWITCH_BUFFERS = COMMAND_APPLY_THRESHOLD+1, COMMAND_BINARY_ADD = COMMAND_SWITCH_BUFFERS+1,
           COMMAND_APPLY_INVERT = COMMAND_BINARY_ADD+1, COMMAND_APPLY_POW = COMMAND_APPLY_INVERT+1, COMMAND_APPLY_SQRT = COMMAND_APPLY_POW+1,
-          COMMAND_CONVOLUTION = COMMAND_APPLY_SQRT+1, COMMAND_BINARY_SUB = COMMAND_CONVOLUTION+1, COMMAND_BINARY_MULT = COMMAND_BINARY_SUB+1;
+          COMMAND_CONVOLUTION = COMMAND_APPLY_SQRT+1, COMMAND_BINARY_SUB = COMMAND_CONVOLUTION+1, COMMAND_BINARY_MULT = COMMAND_BINARY_SUB+1,
+          COMMAND_APPLY_MULT = COMMAND_BINARY_MULT+1;
+
+//systemverilog enum
+// enum bit [7:0] {
+//    COMMAND_PARAM, COMMAND_SEND_IMG, COMMAND_READ_IMG,
+//    COMMAND_GET_STATUS, COMMAND_APPLY_ADD, COMMAND_APPLY_THRESHOLD,COMMAND_SWITCH_BUFFERS, COMMAND_BINARY_ADD,
+//    COMMAND_APPLY_INVERT, COMMAND_APPLY_POW, COMMAND_APPLY_SQRT,COMMAND_CONVOLUTION, COMMAND_BINARY_SUB, COMMAND_BINARY_MULT,
+// COMMAND_APPLY_MULT
+// } Commands;
 
 parameter MEMORY_SIZE = 1024*128;
 parameter BUFFER_SIZE = MEMORY_SIZE/2;
@@ -106,6 +129,8 @@ reg [31:0] buffer_storage_address;
 
 reg [15:0] convolution_matrix [0:8]; //3x3 matrix
 reg [7:0] convolution_params;
+
+reg [7:0] mult_value_param;
 
 //returns 8bit value from 16bit with possible clamping
 function [7:0] apply_clamp;
@@ -240,6 +265,12 @@ begin
          COMMAND_BINARY_SUB: begin
             state <= STATE_BINARY_ADD_READ_PARAM;
             counter_read <= 0;
+         end
+         COMMAND_APPLY_MULT: begin
+            state <= STATE_APPLY_MULT_READ_PARAM;
+            counter_read <= 1;
+         end
+         default: begin
          end
          endcase
       end
@@ -443,6 +474,21 @@ begin
          proc_memory_addr_counter <= 0; //offset
       end
    end
+   STATE_APPLY_MULT_READ_PARAM: begin
+      if(comm_data_in_valid == 1 && counter_read == 1) begin
+         mult_value_param <= comm_data_in;
+         counter_read <= 0;
+      end else if (comm_data_in_valid == 1 && counter_read == 0) begin
+         state_processing <= STATE_PROC_UNARY;
+         processing_command <= COMMAND_APPLY_MULT;
+         state <= STATE_WAIT_COMMAND;
+         clamp <= comm_data_in[0];
+         proc_counter_read <= img_width*img_height;
+         proc_memory_addr_counter <= 0; //offset
+      end
+   end
+   default: begin
+   end
    endcase
 
    case (state_processing)
@@ -494,6 +540,11 @@ begin
             end else if(processing_command == COMMAND_APPLY_SQRT) begin
                data_write[7:0] <= {1'b0, data_read[7:1]}; //TODO: this is not a sqrt
                data_write[15:8] <= {1'b0, data_read[15:9]};
+            end else if(processing_command == COMMAND_APPLY_MULT) begin
+               temp_calc = mult_value_param*data_read[7:0];
+               data_write[7:0] <= apply_clamp_fixed16(temp_calc, clamp);
+               temp_calc = mult_value_param*data_read[15:8];
+               data_write[15:8] <= apply_clamp_fixed16(temp_calc, clamp);
             end
 
             proc_memory_addr_counter <= proc_memory_addr_counter+1;
@@ -668,6 +719,8 @@ begin
             state_processing <= STATE_IDLE;
          end
       end
+   end
+   default: begin
    end
    endcase
 end

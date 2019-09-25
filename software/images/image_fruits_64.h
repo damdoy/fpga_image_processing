@@ -11,7 +11,7 @@ pixel[1] = ((((data[1] - 33) & 0xF) << 4) | ((data[2] - 33) >> 2)); \
 pixel[2] = ((((data[2] - 33) & 0x3) << 6) | ((data[3] - 33))); \
 data += 4; \
 }
-static char *header_data =
+static const char *header_data =
 	"V>86VN<7X^`@Y/$AX^`@Y/$AV>86UN,3UN,3X.T=U^04T-T-?XN\\J[?HT]`0T]`0"
 	"T=X.@HZ_J[?HD9W.TM\\/S=H*R]@(Z?8F`0T]\\O\\OV.45Q-$!Q-$!M\\/TN\\?XO,CY"
 	"NL;WN,3UML+SKKKKL;WNLK[OK[OLKKKKJ[?HHJ[?I+#AK+CIML+SM<'RLK[OI+#A"
