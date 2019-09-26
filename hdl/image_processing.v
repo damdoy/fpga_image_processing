@@ -181,8 +181,11 @@ initial begin
    state_processing = STATE_IDLE;
 
    counter_read = 0;
+
    buffer_input_address = 0;
-   buffer_storage_address = BUFFER2_LOCATION;
+   //doesn't want to be init at this value ==> do it in init state
+   // buffer_storage_address = BUFFER2_LOCATION;
+   buffer_storage_address = 0;
 
    img_width = 0;
    img_height = 0;
@@ -206,6 +209,8 @@ begin
          COMMAND_PARAM: begin
             state <= STATE_READ_COMMAND_PARAM_WIDTH;
             counter_read <= 1; //will be used to read the 16bits
+            buffer_storage_address <= BUFFER2_LOCATION;
+            buffer_input_address <= 0;
          end
          COMMAND_SEND_IMG: begin
             state <= STATE_SEND_IMG;
@@ -494,7 +499,7 @@ begin
    case (state_processing)
    STATE_IDLE: begin
    end
-   STATE_PROC_UNARY: begin
+   STATE_PROC_UNARY: begin : unary
       reg [15:0] temp_calc; //used for calculations
       //assume single port ram
       if(proc_memory_addr_counter[0] == 1'b0) begin
@@ -556,7 +561,7 @@ begin
          end
       end
    end
-   STATE_PROC_BINARY: begin
+   STATE_PROC_BINARY: begin : binary
       reg [15:0] temp_calc; //used for calculations
       //assume single port ram
       if(proc_memory_addr_counter[0] == 1'b0 && binary_read_buffer == 0) begin
@@ -603,7 +608,7 @@ begin
          end
       end
    end
-   STATE_PROC_CONVOLUTION: begin
+   STATE_PROC_CONVOLUTION: begin : conv
       reg [15:0] temp_calc; //used for calculations
 
       if(convolution_add_to_result == 1 && convolution_reading_data != 2'b10) begin

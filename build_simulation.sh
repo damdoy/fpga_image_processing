@@ -7,9 +7,9 @@ if [ -d "obj_dir" ]; then
 fi
 
 # to create the obj dir:
-verilator -Wall --cc hdl/image_processing.v --exe simulation/image_processing_simulation.cpp software/main.cpp 
+verilator -Wall --cc hdl/image_processing.v --exe simulation/image_processing_simulation.cpp software/main.cpp
 
 # to compile:
-make CXXFLAGS="-g" -j -C obj_dir -f Vimage_processing.mk Vimage_processing
+make CXXFLAGS="-g -DSIMULATION" -j -C obj_dir -f Vimage_processing.mk Vimage_processing
 
-cp obj_dir/Vimage_processing simu
+# cp obj_dir/Vimage_processing simu

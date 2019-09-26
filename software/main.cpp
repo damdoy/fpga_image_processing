@@ -8,11 +8,14 @@
 // #include "images/image_sequential.h"
 
 #include "image_processing.hpp"
+
+#ifdef SIMULATION
 #include "../simulation/image_processing_simulation.hpp"
+#elif ICE40
+#include "../ice40/software/image_processing_ice40.hpp"
+#endif
 
-void test_add_threshold(uint8_t *image_input, uint8_t *image_output){
-   Image_processing *img_proc = new Image_processing_simulation();
-
+void test_add_threshold(uint8_t *image_input, uint8_t *image_output, Image_processing *img_proc){
    img_proc->send_params(image_width, image_height);
 
    uint8_t status[4];
@@ -47,15 +50,11 @@ void test_add_threshold(uint8_t *image_input, uint8_t *image_output){
 
    img_proc->switch_buffers();
    img_proc->read_image(image_output);
-
-   delete img_proc;
 }
 
 //will load the image in the input buffer and set the storage buffer to pixels of value 32
 // and then will add the two buffers
-void test_binary_add(uint8_t *image_input, uint8_t *image_output){
-   Image_processing *img_proc = new Image_processing_simulation();
-
+void test_binary_add(uint8_t *image_input, uint8_t *image_output, Image_processing *img_proc){
    img_proc->send_params(image_width, image_height);
    img_proc->send_image(image_input); //in input buffer
 
@@ -69,13 +68,9 @@ void test_binary_add(uint8_t *image_input, uint8_t *image_output){
 
    img_proc->switch_buffers();
    img_proc->read_image(image_output);
-
-   delete img_proc;
 }
 
-void test_gaussian_blur(uint8_t *image_input, uint8_t *image_output){
-   Image_processing *img_proc = new Image_processing_simulation();
-
+void test_gaussian_blur(uint8_t *image_input, uint8_t *image_output, Image_processing *img_proc){
    img_proc->send_params(image_width, image_height);
    img_proc->send_image(image_input);
 
@@ -95,14 +90,10 @@ void test_gaussian_blur(uint8_t *image_input, uint8_t *image_output){
    img_proc->switch_buffers();
 
    img_proc->read_image(image_output);
-
-   delete img_proc;
 }
 
 //use gradient kernels
-void test_simple_edge_detection(uint8_t *image_input, uint8_t *image_output){
-   Image_processing *img_proc = new Image_processing_simulation();
-
+void test_simple_edge_detection(uint8_t *image_input, uint8_t *image_output, Image_processing *img_proc){
    img_proc->send_params(image_width, image_height);
    img_proc->send_image(image_input);
 
@@ -137,31 +128,9 @@ void test_simple_edge_detection(uint8_t *image_input, uint8_t *image_output){
    img_proc->switch_buffers();
 
    img_proc->read_image(image_output);
-
-   delete img_proc;
 }
 
-void test_simulation(uint8_t *image_input, uint8_t *image_output){
-   Image_processing *img_proc = new Image_processing_simulation();
-
-   img_proc->send_params(image_width, image_height);
-   img_proc->send_image(image_input);
-
-   img_proc->switch_buffers();
-
-   img_proc->send_add(32, true);
-   img_proc->wait_end_busy();
-   img_proc->send_threshold(128, false, 0);
-   img_proc->wait_end_busy();
-
-   img_proc->switch_buffers();
-   img_proc->read_image(image_output);
-
-   delete img_proc;
-}
-
-void test_multiplication(uint8_t *image_input, uint8_t *image_output){
-   Image_processing *img_proc = new Image_processing_simulation();
+void test_multiplication(uint8_t *image_input, uint8_t *image_output, Image_processing *img_proc){
 
    img_proc->send_params(image_width, image_height);
    img_proc->send_image(image_input);
@@ -173,12 +142,18 @@ void test_multiplication(uint8_t *image_input, uint8_t *image_output){
 
    img_proc->switch_buffers();
    img_proc->read_image(image_output);
-
-   delete img_proc;
 }
 
 int main(){
    FILE *output_file = fopen("output.dat", "w");
+
+   Image_processing *img_proc;
+
+   #ifdef SIMULATION
+   img_proc = new Image_processing_simulation();
+   #elif ICE40
+   img_proc = new Image_processing_ice40();
+   #endif
 
    uint8_t *image_input = new uint8_t[image_width*image_height];
    uint8_t *image_output = new uint8_t[image_width*image_height];
@@ -191,11 +166,11 @@ int main(){
    }
 
    //test selection
-   // test_add_threshold(image_input, image_output);
-   // test_binary_add(image_input, image_output);
-   // test_gaussian_blur(image_input, image_output);
-   test_simple_edge_detection(image_input, image_output);
-   // test_multiplication(image_input, image_output);
+   // test_add_threshold(image_input, image_output, img_proc);
+   // test_binary_add(image_input, image_output, img_proc);
+   // test_gaussian_blur(image_input, image_output, img_proc);
+   test_simple_edge_detection(image_input, image_output, img_proc);
+   // test_multiplication(image_input, image_output, img_proc);
 
    // test_simulation(image_input, image_output);
 
@@ -208,5 +183,6 @@ int main(){
 
    fclose(output_file);
 
+   delete img_proc;
    return 0;
 }
