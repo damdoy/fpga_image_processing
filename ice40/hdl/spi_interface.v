@@ -12,7 +12,8 @@
 // wire [7:0] ip_comm_data_out;
 // wire ip_comm_data_out_valid;
 module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, output spi_miso,
-                     output reg [7:0] spi_cmd, output reg [7:0] spi_data_out, output reg spi_data_out_valid, input [7:0] spi_data_in, input spi_data_in_valid);
+                     output reg [7:0] spi_cmd, output reg [7:0] spi_data_out, output reg spi_data_out_valid, input [7:0] spi_data_in, input spi_data_in_valid,
+                     output spi_data_in_free);
 
    parameter NOP=0, INIT=1, READ_DATA=2, RECEIVE_CMD=3, RECEIVE_DATA=4;
 
@@ -62,6 +63,8 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
 
    reg [7:0] buffer_data_in;
    reg buffer_full;
+
+   assign spi_data_in_free = !buffer_full;
 
    initial begin
 
@@ -242,6 +245,7 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
             end else if( command_data[0] == READ_DATA) begin
                if(buffer_full == 1)begin
                   data_to_send <= buffer_data_in;
+                  buffer_full <= 0;
                end
             end
 

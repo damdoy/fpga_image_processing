@@ -40,17 +40,18 @@ void Image_processing_simulation::send_params(uint16_t img_width, uint16_t img_h
 void Image_processing_simulation::read_status(uint8_t *output){
    fifo_in.push(Operation(true, COMMAND_GET_STATUS, 0));
 
-   for (size_t i = 0; i < 6; i++) {
+   for (size_t i = 0; i < 100; i++) {
       main_loop_clk();
    }
 
-   while(!fifo_out.empty()){
-      printf("read status: %u\n", fifo_out.front());
-      fifo_out.pop();
-   }
+   // while(!fifo_out.empty()){
+   //    printf("read status: %u\n", fifo_out.front());
+   //    fifo_out.pop();
+   // }
 
    for (size_t i = 0; i < 4; i++) {
       if(!fifo_out.empty()){
+         printf("read status: %u\n", fifo_out.front());
          output[i] = fifo_out.front();
          fifo_out.pop();
       }
@@ -149,13 +150,13 @@ void Image_processing_simulation::wait_end_busy(){
    do{
       fifo_in.push(Operation(true, COMMAND_GET_STATUS, 0));
 
-      for (size_t i = 0; i < 10; i++) {
+      for (size_t i = 0; i < 100; i++) {
          main_loop_clk();
       }
 
       for (size_t i = 0; i < 4; i++) {
          status_out[i] = fifo_out.front();
-         printf("status %lu = %d\n", i, fifo_out.front());
+         printf("status %lu = 0x%x\n", i, fifo_out.front());
          fifo_out.pop();
       }
       printf("wait_end_busy\n");
@@ -166,7 +167,7 @@ void Image_processing_simulation::read_image(uint8_t* image_out){
 
    fifo_in.push(Operation(true, COMMAND_READ_IMG, 0));
 
-   for (size_t i = 0; i < image_width*image_height*2; i++) {
+   for (size_t i = 0; i < image_width*image_height*20; i++) {
       main_loop_clk();
    }
 
@@ -223,6 +224,11 @@ void Image_processing_simulation::main_loop_clk(){
    simulator->clk = 1;
    simulator->reset = 0;
    simulator->comm_data_in_valid = 0;
+   static int counter_free = 0;
+   if(counter_free > 0){ //simulates the fact that the comm line can be full
+      counter_free--;
+   }
+   simulator->comm_data_out_free = (counter_free == 0);
    if(!fifo_in.empty()){
       Operation op = fifo_in.front();
       fifo_in.pop();
@@ -238,6 +244,8 @@ void Image_processing_simulation::main_loop_clk(){
 
    if(simulator->comm_data_out_valid == 1){
       fifo_out.push(simulator->comm_data_out);
+      counter_free = 3;
+      simulator->comm_data_out_free = (counter_free == 0);
    }
 
    simulator->data_read_valid = 0;

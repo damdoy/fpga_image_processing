@@ -7,7 +7,7 @@ clk, reset,
 addr, wr_en, rd_en, data_read, data_read_valid, data_write,
 
 //comm module access
-comm_cmd, comm_data_in, comm_data_in_valid, comm_data_out, comm_data_out_valid
+comm_cmd, comm_data_in, comm_data_in_valid, comm_data_out, comm_data_out_valid, comm_data_out_free
 );
 
 input wire clk;
@@ -27,6 +27,7 @@ input wire [7:0] comm_data_in;
 input wire comm_data_in_valid;
 output reg [7:0] comm_data_out;
 output reg comm_data_out_valid;
+input wire comm_data_out_free;
 
 parameter STATE_IDLE = 0, STATE_WAIT_COMMAND = STATE_IDLE+1, STATE_READ_COMMAND_PARAM_WIDTH=STATE_WAIT_COMMAND+1,
           STATE_READ_COMMAND_PARAM_HEIGHT = STATE_READ_COMMAND_PARAM_WIDTH+1, STATE_SEND_IMG = STATE_READ_COMMAND_PARAM_HEIGHT+1,
@@ -83,6 +84,7 @@ parameter CONVOLUTION_LINE_MAX_SIZE = 256;
 reg [15:0] counter_read;
 reg [31:0] memory_addr_counter;
 reg [15:0] mem_data_buffer;
+reg mem_data_buffer_full;
 reg [15:0] buffer_read;
 
 reg [15:0] proc_counter_read;
@@ -169,6 +171,7 @@ initial begin
    rd_en = 0;
    data_write = 16'b0;
 
+   mem_data_buffer_full = 0;
    comm_data_out = 8'b0;
    comm_data_out_valid = 0;
 
@@ -304,26 +307,27 @@ begin
       end
    end
    STATE_GET_STATUS: begin
-      // comm_data_out_valid <= 1;
-      if(counter_read == 3) begin
-         comm_data_out_valid <= 1;
-         comm_data_out[7:0] <= 11;
-         comm_data_out[0] <= ~(state_processing == STATE_IDLE);
-      end else if(counter_read == 2) begin
-         comm_data_out_valid <= 1;
-         comm_data_out[7:0] <= 22;
-      end else if(counter_read == 1) begin
-         comm_data_out_valid <= 1;
-         comm_data_out[7:0] <= 33;
-      end else begin
-         comm_data_out_valid <= 1;
-         comm_data_out[7:0] <= 44;
-      end
+      if(comm_data_out_free == 1) begin
+         if(counter_read == 3) begin
+            comm_data_out_valid <= 1;
+            comm_data_out[7:0] <= 8'h11;
+            comm_data_out[0] <= ~(state_processing == STATE_IDLE);
+         end else if(counter_read == 2) begin
+            comm_data_out_valid <= 1;
+            comm_data_out[7:0] <= 8'h22;
+         end else if(counter_read == 1) begin
+            comm_data_out_valid <= 1;
+            comm_data_out[7:0] <= 8'h33;
+         end else begin
+            comm_data_out_valid <= 1;
+            comm_data_out[7:0] <= 8'h44;
+         end
 
-      if(counter_read > 0) begin
-         counter_read <= counter_read - 1;
-      end else begin //counter_read == 0
-         state <= STATE_WAIT_COMMAND;
+         if(counter_read > 0) begin
+            counter_read <= counter_read - 1;
+         end else begin //counter_read == 0
+            state <= STATE_WAIT_COMMAND;
+         end
       end
    end
    STATE_SEND_IMG: begin
@@ -373,18 +377,26 @@ begin
          memory_addr_counter <= memory_addr_counter + 1;
       end else begin
          if (counter_read[0] == 1'b0 && data_read_valid == 1'b1) begin //image size mod 2 should be 0
-            comm_data_out_valid <= 1;
-            comm_data_out <= data_read[7:0];
             mem_data_buffer <= data_read;
-            counter_read <= counter_read - 1;
-         end else begin
+            mem_data_buffer_full <= 1;
+         end
 
-            comm_data_out_valid <= 1;
-            comm_data_out <= mem_data_buffer[15:8];
-            counter_read <= counter_read - 1;
-            memory_addr_counter <= memory_addr_counter+1;
-            if(counter_read <= 1) begin // > 1 and not 0 because we are shifted by one
-               state <= STATE_WAIT_COMMAND;
+         if( comm_data_out_free == 1 && mem_data_buffer_full == 1 ) begin
+            if (counter_read[0] == 1'b0) begin //image size mod 2 should be 0
+               comm_data_out_valid <= 1;
+               comm_data_out <= data_read[7:0];
+               mem_data_buffer <= data_read;
+               counter_read <= counter_read - 1;
+            end else begin
+
+               comm_data_out_valid <= 1;
+               comm_data_out <= mem_data_buffer[15:8];
+               counter_read <= counter_read - 1;
+               memory_addr_counter <= memory_addr_counter+1;
+               mem_data_buffer_full <= 0;
+               if(counter_read <= 1) begin // > 1 and not 0 because we are shifted by one
+                  state <= STATE_WAIT_COMMAND;
+               end
             end
          end
       end

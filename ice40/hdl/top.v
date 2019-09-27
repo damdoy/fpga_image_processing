@@ -25,10 +25,12 @@ wire [7:0] ip_comm_data_in;
 wire ip_comm_data_in_valid;
 wire [7:0] ip_comm_data_out;
 wire ip_comm_data_out_valid;
+wire ip_comm_data_out_free;
 
 image_processing image_processing(.clk(clk), .reset(reset_ip),
    .addr(ip_mem_addr), .wr_en(ip_mem_wr_en), .rd_en(ip_mem_rd_en), .data_read(ip_mem_data_read), .data_read_valid(ip_mem_data_read_valid), .data_write(ip_mem_data_write),
-   .comm_cmd(ip_comm_cmd), .comm_data_in(ip_comm_data_in), .comm_data_in_valid(ip_comm_data_in_valid), .comm_data_out(ip_comm_data_out), .comm_data_out_valid(ip_comm_data_out_valid)
+   .comm_cmd(ip_comm_cmd), .comm_data_in(ip_comm_data_in), .comm_data_in_valid(ip_comm_data_in_valid), .comm_data_out(ip_comm_data_out), .comm_data_out_valid(ip_comm_data_out_valid),
+   .comm_data_out_free(ip_comm_data_out_free)
 );
 
 ram_interface ram_interface(.clk(clk), .addr(ip_mem_addr), .wr_en(ip_mem_wr_en), .rd_en(ip_mem_rd_en),
@@ -36,7 +38,8 @@ ram_interface ram_interface(.clk(clk), .addr(ip_mem_addr), .wr_en(ip_mem_wr_en),
 );
 
 spi_interface spi_interface(.clk(clk), .spi_sck(SPI_SCK), .spi_ss(SPI_SS), .spi_mosi(SPI_MOSI), .spi_miso(SPI_MISO),
-   .spi_cmd(ip_comm_cmd), .spi_data_out(ip_comm_data_in), .spi_data_out_valid(ip_comm_data_in_valid), .spi_data_in(ip_comm_data_out), .spi_data_in_valid(ip_comm_data_out_valid)
+   .spi_cmd(ip_comm_cmd), .spi_data_out(ip_comm_data_in), .spi_data_out_valid(ip_comm_data_in_valid), .spi_data_in(ip_comm_data_out), .spi_data_in_valid(ip_comm_data_out_valid),
+   .spi_data_in_free(ip_comm_data_out_free)
 );
 
 initial begin

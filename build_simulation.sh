@@ -12,4 +12,4 @@ verilator -Wall --cc hdl/image_processing.v --exe simulation/image_processing_si
 # to compile:
 make CXXFLAGS="-g -DSIMULATION" -j -C obj_dir -f Vimage_processing.mk Vimage_processing
 
-# cp obj_dir/Vimage_processing simu
+cp obj_dir/Vimage_processing simu
