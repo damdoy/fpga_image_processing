@@ -427,6 +427,7 @@ begin
          clamp <= comm_data_in[0];
          proc_counter_read <= img_width*img_height;
          proc_memory_addr_counter <= 0; //offset
+         binary_read_buffer <= 0;
       end
    end
    STATE_APPLY_POW_READ_PARAM: begin
@@ -479,6 +480,7 @@ begin
          clamp <= comm_data_in[0];
          proc_counter_read <= img_width*img_height;
          proc_memory_addr_counter <= 0; //offset
+         binary_read_buffer <= 0;
       end
    end
    STATE_BINARY_MULT_READ_PARAM: begin
@@ -489,6 +491,7 @@ begin
          clamp <= comm_data_in[0];
          proc_counter_read <= img_width*img_height;
          proc_memory_addr_counter <= 0; //offset
+         binary_read_buffer <= 0;
       end
    end
    STATE_APPLY_MULT_READ_PARAM: begin
@@ -612,7 +615,7 @@ begin
 
             proc_memory_addr_counter <= proc_memory_addr_counter+1;
 
-            if(proc_counter_read > 2) begin // > 1 and not 0 because we are shifted by one
+            if(proc_counter_read > 2) begin // > 2 and not 0 because we are shifted by one
                proc_counter_read <= proc_counter_read - 2;
             end else begin
                state_processing <= STATE_IDLE;
@@ -636,7 +639,6 @@ begin
          rd_en <= 1;
          addr <= proc_conv_memory_addr_read;
          proc_conv_memory_addr_read <= proc_conv_memory_addr_read + 1;
-         binary_read_buffer <= 1;
 
 
          if(convolution_add_to_result == 0) begin
