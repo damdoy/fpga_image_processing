@@ -27,10 +27,10 @@ void Image_processing_simulation::send_params(uint16_t img_width, uint16_t img_h
    printf("sending img_height8[0]: %u, [1]: %u\n", img_height8[0], img_height8[1]);
 
    fifo_in.push(Operation(true, COMMAND_PARAM, 0));
-   fifo_in.push(Operation(false, COMMAND_NONE, img_height8[0]));
-   fifo_in.push(Operation(false, COMMAND_NONE, img_height8[1]));
    fifo_in.push(Operation(false, COMMAND_NONE, img_width8[0]));
    fifo_in.push(Operation(false, COMMAND_NONE, img_width8[1]));
+   fifo_in.push(Operation(false, COMMAND_NONE, img_height8[0]));
+   fifo_in.push(Operation(false, COMMAND_NONE, img_height8[1]));
 
    for (size_t i = 0; i < 5; i++) {
       main_loop_clk();

@@ -13,7 +13,7 @@
 // wire ip_comm_data_out_valid;
 module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, output spi_miso,
                      output reg [7:0] spi_cmd, output reg [7:0] spi_data_out, output reg spi_data_out_valid, input [7:0] spi_data_in, input spi_data_in_valid,
-                     output spi_data_in_free);
+                     output spi_data_in_free, output reg [2:0] led_debug);
 
    parameter NOP=0, INIT=1, READ_DATA=2, RECEIVE_CMD=3, RECEIVE_DATA=4;
 
@@ -56,6 +56,8 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
 
    reg [7:0] counter_send; //counts the bytes to send
    reg [7:0] data_to_send; //buffer for data to be written in send register
+   reg is_data_to_send;
+   reg [7:0] data_to_send_debug; //buffer for data to be written in send register
 
    //regs for the "vector" commands
    reg [7:0] data_vector[15:0]; //4*32bits = 16*8bits
@@ -64,7 +66,8 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
    reg [7:0] buffer_data_in;
    reg buffer_full;
 
-   assign spi_data_in_free = !buffer_full;
+   //not free if buffer is full or data is incoming
+   assign spi_data_in_free = !(buffer_full || spi_data_in_valid);
 
    initial begin
 
@@ -72,6 +75,9 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
       spi_rw = 0;
       spi_adr = 0;
       spi_dati = 0;
+      data_to_send_debug = 0;
+      data_to_send = 0;
+      is_data_to_send = 0;
 
       is_spi_init = 0;
       counter_send = 0;
@@ -80,6 +86,8 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
       buffer_full = 0;
 
       state_spi = INIT_SPICR0;
+
+      led_debug <= 3'b100;
    end
 
    always @(posedge clk)
@@ -160,7 +168,7 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
             end
 
             if (is_spi_init == 1 && spi_dato[3] == 1) begin
-               if(counter_send < 6) begin //can only send 6 bytes back
+               if(counter_send < 2) begin //can only send 2 bytes back
                   state_spi <= SPI_WAIT_TRANSMIT_READY;
                end else begin
                   state_spi <= SPI_READ_OPCODE;
@@ -186,8 +194,18 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
          if(counter_send == 0) begin //status
             spi_dati <= 8'b01000000;
             spi_dati[0] <= buffer_full; //tells that something useful was sent
+            // spi_dati[0] <= 1; //tells that something useful was sent
          end else begin
-            spi_dati <= data_to_send;
+            if(is_data_to_send == 1) begin
+               spi_dati <= data_to_send;
+               // spi_dati <= 8'h48
+            end else begin
+               spi_dati <= 8'h42;
+            end
+            // spi_dati <= data_to_send_debug + 1;
+            // data_to_send_debug <= data_to_send_debug + 1;
+            // led_debug <= 3'b001;
+            // spi_dati <= 8'h22;
          end
 
          spi_stb <= 1;
@@ -195,6 +213,11 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
          if(spi_ack == 1) begin
             spi_stb <= 0;
             counter_send <= counter_send + 1;
+
+            if(is_data_to_send == 1) begin
+               is_data_to_send <= 0;
+               buffer_full <= 0;
+            end
 
             if (is_spi_init == 0) begin
                state_spi <= SPI_READ_INIT;
@@ -230,22 +253,35 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
             state_spi <= SPI_WAIT_RECEPTION;
             command_data[counter_read] <= spi_dato;
 
-            if( counter_read == 0 ) begin
-               data_to_send <= spi_dato;
-            end else if( command_data[0] == RECEIVE_CMD) begin
-               if( counter_read == 1 ) begin
-                  spi_data_out_valid <= 1;
-                  spi_cmd <= spi_dato;
-               end
-            end else if( command_data[0] == RECEIVE_DATA) begin
-               if( counter_read == 1 ) begin
-                  spi_data_out_valid <= 1;
-                  spi_data_out <= spi_dato;
-               end
-            end else if( command_data[0] == READ_DATA) begin
+            if( counter_read == 0 && spi_dato == READ_DATA) begin
                if(buffer_full == 1)begin
                   data_to_send <= buffer_data_in;
-                  buffer_full <= 0;
+                  // data_to_send <= data_to_send+1;
+                  // data_to_send <= 8'h41;
+                  is_data_to_send <= 1;
+                  // led_debug <= 3'b010;
+                  // led_debug <= led_debug+1;
+                  // is_data_to_send <= 1;
+                  // data_to_send <= 8'h55;
+                  // data_to_send <= data_to_send+1;
+                  // buffer_full <= 0;
+               end
+            end
+
+            if( counter_read == 1 ) begin
+               if( command_data[0] == RECEIVE_CMD) begin
+                  // if( counter_read == 1 ) begin
+                     if(spi_dato == 8'h2)begin
+                        led_debug <= 3'b010;
+                     end
+                     spi_data_out_valid <= 1;
+                     spi_cmd <= spi_dato;
+                  // end
+               end else if( command_data[0] == RECEIVE_DATA) begin
+                  // if( counter_read == 1 ) begin
+                     spi_data_out_valid <= 1;
+                     spi_data_out <= spi_dato;
+                  // end
                end
             end
 

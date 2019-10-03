@@ -72,12 +72,15 @@
 int spi_init();
 
 //send without caring about result
-int spi_command_send(uint8_t cmd, uint8_t param[7]);
+int spi_command_send(uint8_t cmd, uint8_t param[3]);
+
+//sends one byte without caring about result
+int spi_command_send(uint8_t cmd, uint8_t param);
 
 //send 32 bits
 int spi_command_send_32(uint8_t cmd, uint32_t val32b);
 
 //sends data and receive answer
-int spi_command_send_recv(uint8_t cmd, uint8_t send_param[7], uint8_t recv_data[5]);
+int spi_command_send_recv(uint8_t cmd, uint8_t send_param[3], uint8_t recv_data[2]);
 
 #endif

@@ -219,21 +219,30 @@ int spi_init()
 }
 
 //send without caring about result
-int spi_command_send(uint8_t cmd, uint8_t param[7]){
-   uint8_t nop_param[] = {0,0,0,0,0,0,0}; //wont be returned
+int spi_command_send(uint8_t cmd, uint8_t param[3]){
+   uint8_t nop_param[] = {0,0}; //wont be returned
 
    return spi_command_send_recv(cmd, param, nop_param);
 }
 
-//send 32 bits
-int spi_command_send_32(uint8_t cmd, uint32_t val32b){
-   uint8_t param[7] = {val32b&0xff, (val32b>>8)&0xff, (val32b>>16)&0xff, (val32b>>24)&0xff, 0, 0, 0};
-   return spi_command_send(cmd, param);
+//send one byte without caring about result
+int spi_command_send(uint8_t cmd, uint8_t param){
+   uint8_t nop_param[] = {0,0}; //wont be returned
+   uint8_t params[] = {param, 0,0};
+
+   return spi_command_send_recv(cmd, params, nop_param);
 }
 
-int spi_command_send_recv(uint8_t cmd, uint8_t send_param[7], uint8_t recv_data[5])
+//send 32 bits
+//TODO => work with 3bytes
+// int spi_command_send_32(uint8_t cmd, uint32_t val32b){
+//    uint8_t param[7] = {val32b&0xff, (val32b>>8)&0xff, (val32b>>16)&0xff, (val32b>>24)&0xff, 0, 0, 0};
+//    return spi_command_send(cmd, param);
+// }
+
+int spi_command_send_recv(uint8_t cmd, uint8_t send_param[3], uint8_t recv_data[2])
 {
-   uint8_t to_send[] = {cmd, send_param[0], send_param[1], send_param[2], send_param[3], send_param[4], send_param[5], send_param[6]};
+   uint8_t to_send[] = {cmd, send_param[0], send_param[1], send_param[2]};
    uint retries = 0;
    uint max_retries = 10;
 
@@ -246,7 +255,7 @@ int spi_command_send_recv(uint8_t cmd, uint8_t send_param[7], uint8_t recv_data[
 
    //copy data received to output
    //first 2 bytes are garbage, the third one is the status
-   memcpy(recv_data, to_send+3, 5);
+   memcpy(recv_data, to_send+2, 2);
 
    return retries >= max_retries;
 }

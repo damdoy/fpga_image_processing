@@ -1,8 +1,15 @@
 #include <stdint.h>
 #include <queue>
 #include <cmath>
+#include <cstdio>
 
 #include "image_processing_ice40.hpp"
+
+#define SPI_NOP 0x00
+#define SPI_INIT 0x01
+#define SPI_READ_DATA 0x02
+#define SPI_SEND_CMD 0x03
+#define SPI_SEND_DATA 0x04
 
 Image_processing_ice40::Image_processing_ice40(){
 
@@ -13,52 +20,59 @@ Image_processing_ice40::~Image_processing_ice40(){
 }
 
 void Image_processing_ice40::send_params(uint16_t img_width, uint16_t img_height){
-   //
-   // this->image_width = img_width;
-   // this->image_height = img_height;
-   //
-   // uint8_t img_width8[2] = {img_width&0xFF, (img_width>>8)&0xFF};
-   // uint8_t img_height8[2] = {img_height&0xFF, (img_height>>8)&0xFF};
-   //
-   // printf("sending img_width8[0]: %u, [1]: %u\n", img_width8[0], img_width8[1]);
-   // printf("sending img_height8[0]: %u, [1]: %u\n", img_height8[0], img_height8[1]);
-   //
-   // fifo_in.push(Operation(true, COMMAND_PARAM, 0));
-   // fifo_in.push(Operation(false, COMMAND_NONE, img_height8[0]));
-   // fifo_in.push(Operation(false, COMMAND_NONE, img_height8[1]));
-   // fifo_in.push(Operation(false, COMMAND_NONE, img_width8[0]));
-   // fifo_in.push(Operation(false, COMMAND_NONE, img_width8[1]));
-   //
-   // for (size_t i = 0; i < 5; i++) {
-   //    main_loop_clk();
-   // }
+
+   spi_init();
+
+   uint8_t init_param[3] = {0x0, 0x0, 0x11};
+
+   if (spi_command_send(SPI_INIT, init_param) != 0){
+      printf("trouble to get answer\n");
+   }
+
+   this->image_width = img_width;
+   this->image_height = img_height;
+
+   uint8_t img_width8[2] = {img_width&0xFF, (img_width>>8)&0xFF};
+   uint8_t img_height8[2] = {img_height&0xFF, (img_height>>8)&0xFF};
+   // printf("ice40!\n");
+   printf("sending img_width8[0]: %u, [1]: %u\n", img_width8[0], img_width8[1]);
+   printf("sending img_height8[0]: %u, [1]: %u\n", img_height8[0], img_height8[1]);
+
+   spi_command_send(SPI_SEND_CMD, COMMAND_PARAM);
+   spi_command_send(SPI_SEND_DATA, img_width8[0]);
+   spi_command_send(SPI_SEND_DATA, img_width8[1]);
+   spi_command_send(SPI_SEND_DATA, img_height8[0]);
+   spi_command_send(SPI_SEND_DATA, img_height8[1]);
 }
 
 void Image_processing_ice40::read_status(uint8_t *output){
-   // fifo_in.push(Operation(true, COMMAND_GET_STATUS, 0));
-   //
-   // for (size_t i = 0; i < 6; i++) {
-   //    main_loop_clk();
-   // }
-   //
-   // while(!fifo_out.empty()){
-   //    printf("read status: %u\n", fifo_out.front());
-   //    fifo_out.pop();
-   // }
-   //
-   // for (size_t i = 0; i < 4; i++) {
-   //    if(!fifo_out.empty()){
-   //       output[i] = fifo_out.front();
-   //       fifo_out.pop();
-   //    }
-   // }
+
+   spi_command_send(SPI_SEND_CMD, COMMAND_GET_STATUS);
+
+   uint8_t send_data[3]; //don't care
+   uint8_t recv_data[2];
+   int counter_output = 0;
+   for (size_t i = 0; i < 100; i++) {
+      spi_command_send_recv(SPI_READ_DATA, send_data, recv_data);
+      printf("recv_data[0]: 0x%x\n", recv_data[0]);
+      if(recv_data[0]&1 == 1 && counter_output<4){
+         printf("recv data: 0x%x\n", recv_data[1]);
+         output[counter_output] = recv_data[1];
+         counter_output++;
+      }
+   }
 }
 
 void Image_processing_ice40::send_image(uint8_t *image){
+
+
    // fifo_in.push(Operation(true, COMMAND_SEND_IMG, 0));
-   // for (size_t i = 0; i < image_width*image_height; i++) {
+   spi_command_send(SPI_SEND_CMD, COMMAND_SEND_IMG);
+   for (size_t i = 0; i < image_width*image_height; i++) {
    //    fifo_in.push(Operation(false, COMMAND_NONE, image[i]));
-   // }
+      // usleep(1000);
+      spi_command_send(SPI_SEND_DATA, image[i]);
+   }
    //
    // for (size_t i = 0; i < image_width*image_height+500; i++) {
    //    main_loop_clk();
@@ -161,6 +175,20 @@ void Image_processing_ice40::wait_end_busy(){
 
 void Image_processing_ice40::read_image(uint8_t* image_out){
 
+   spi_command_send(SPI_SEND_CMD, COMMAND_READ_IMG);
+
+   uint8_t send_data[3]; //don't care
+   uint8_t recv_data[2];
+   int counter_read = 0;
+   for (size_t i = 0; i < 100; i++) {
+      spi_command_send_recv(SPI_READ_DATA, send_data, recv_data);
+      printf("recv_data[0]: 0x%x\n", recv_data[0]);
+      if(recv_data[0]&1 == 1 && counter_read < image_width*image_height){
+         printf("recv data: 0x%x\n", recv_data[1]);
+         image_out[counter_read] = recv_data[1];
+         counter_read++;
+      }
+   }
    // fifo_in.push(Operation(true, COMMAND_READ_IMG, 0));
    //
    // for (size_t i = 0; i < image_width*image_height*2; i++) {
