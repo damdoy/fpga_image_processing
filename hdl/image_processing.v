@@ -39,7 +39,9 @@ parameter STATE_IDLE = 0, STATE_WAIT_COMMAND = STATE_IDLE+1, STATE_READ_COMMAND_
           STATE_APPLY_POW_READ_PARAM = STATE_PROC_UNARY+1,
           STATE_CONVOLUTION_READ_PARAM = STATE_APPLY_POW_READ_PARAM+1, STATE_PROC_CONVOLUTION = STATE_CONVOLUTION_READ_PARAM+1,
           STATE_BINARY_SUB_READ_PARAM = STATE_PROC_CONVOLUTION+1, STATE_BINARY_MULT_READ_PARAM = STATE_BINARY_SUB_READ_PARAM+1,
-          STATE_APPLY_MULT_READ_PARAM = STATE_BINARY_MULT_READ_PARAM+1, STATE_APPLY_MULT = STATE_APPLY_MULT_READ_PARAM+1;
+          STATE_APPLY_MULT_READ_PARAM = STATE_BINARY_MULT_READ_PARAM+1, STATE_APPLY_MULT = STATE_APPLY_MULT_READ_PARAM+1,
+          STATE_PROC_CONVOLUTION_CALCULATION = STATE_APPLY_MULT+1, STATE_PROC_CONVOLUTION_WRITEBACK_1 = STATE_PROC_CONVOLUTION_CALCULATION+1,
+          STATE_PROC_CONVOLUTION_WRITEBACK_2 = STATE_PROC_CONVOLUTION_WRITEBACK_1+1;
 
 //only works in systemverilog
 // enum bit [7:0] {STATE_IDLE, STATE_WAIT_COMMAND, STATE_READ_COMMAND_PARAM_WIDTH,
@@ -97,6 +99,12 @@ reg binary_read_buffer;
 //will keep the previous lines for convolution
 reg [7:0] convolution_buffer [0:CONVOLUTION_LINE_MAX_SIZE-1][0:1];
 
+//a 4x3 matrix for current calculation
+reg [7:0] convolution_buffer_local [0:3][0:2];
+reg [7:0] matrix_convolution_counter;
+reg [15:0] calc_left_buf;
+reg [15:0] calc_right_buf;
+
 reg [15:0] counter_convolution_x;
 reg [15:0] counter_convolution_y;
 
@@ -112,6 +120,7 @@ reg [7:0] convolution_last_calculation;
 
 reg [1:0] convolution_reading_data;
 reg [15:0] convolution_data_to_add;
+reg [15:0] data_read_store;
 
 //params
 reg [15:0] img_width;
@@ -384,11 +393,9 @@ begin
          if( comm_data_out_free == 1 && mem_data_buffer_full == 1 ) begin
             if (counter_read[0] == 1'b0) begin //image size mod 2 should be 0
                comm_data_out_valid <= 1;
-               comm_data_out <= data_read[7:0];
-               mem_data_buffer <= data_read;
+               comm_data_out <= mem_data_buffer[7:0];
                counter_read <= counter_read - 1;
             end else begin
-
                comm_data_out_valid <= 1;
                comm_data_out <= mem_data_buffer[15:8];
                counter_read <= counter_read - 1;
@@ -624,8 +631,8 @@ begin
       end
    end
    STATE_PROC_CONVOLUTION: begin : conv
-      reg [15:0] temp_calc; //used for calculations
 
+      //read data in target image to be added to the convolution result
       if(convolution_add_to_result == 1 && convolution_reading_data != 2'b10) begin
          if(convolution_reading_data == 2'b00) begin
             rd_en <= 1;
@@ -635,108 +642,217 @@ begin
             convolution_data_to_add <= data_read;
             convolution_reading_data <= 2'b10;
          end
-      end else if(proc_conv_memory_addr_read[0] == 1'b0) begin //read the data
+      end else if(proc_conv_memory_addr_read[0] == 1'b0) begin //read the data (input)
          rd_en <= 1;
          addr <= proc_conv_memory_addr_read;
          proc_conv_memory_addr_read <= proc_conv_memory_addr_read + 1;
-
 
          if(convolution_add_to_result == 0) begin
             convolution_data_to_add <= 16'b0;
          end
       end else if (data_read_valid == 1) begin
 
-         //keep the current read in a buffer before putting it in the convolution buffer because we read data 2 by 2 and we need 3x3 matrices
-         convolution_previous_read[0] <= data_read;
-         convolution_previous_read_counter_x[0] <= counter_convolution_x;
-         convolution_previous_read_counter_y[0] <= counter_convolution_y;
+         data_read_store <= data_read;
+         matrix_convolution_counter <= 0;
+         state_processing <= STATE_PROC_CONVOLUTION_CALCULATION;
 
-         convolution_previous_read[1] <= convolution_previous_read[0];
-         convolution_previous_read_counter_x[1] <= convolution_previous_read_counter_x[0];
-         convolution_previous_read_counter_y[1] <= convolution_previous_read_counter_y[0];
+         // //do the lookup before the calculation (will use the BRAMS! (yosys 0.9))
+         convolution_buffer_local[0][0] <= convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0]+1)%2];
+         convolution_buffer_local[1][0] <= convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0]+1)%2];
+         convolution_buffer_local[2][0] <= convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0]+1)%2];
+         convolution_buffer_local[3][0] <= convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0]+1)%2];
 
-         convolution_buffer[convolution_previous_read_counter_x[1][7:0]][convolution_previous_read_counter_y[1][0]] <= convolution_previous_read[1][7:0];
-         convolution_buffer[convolution_previous_read_counter_x[1][7:0]+1][convolution_previous_read_counter_y[1][0]] <= convolution_previous_read[1][15:8];
+         convolution_buffer_local[0][1] <= convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0])];
+         convolution_buffer_local[1][1] <= convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0])];
+         convolution_buffer_local[2][1] <= convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0])];
+         convolution_buffer_local[3][1] <= convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0])];
 
-         //counts the reads and increment y reg when x has sweept the width
-         if(counter_convolution_x+2 >= img_width) begin
-            counter_convolution_x <= 0;
-            counter_convolution_y <= counter_convolution_y + 1;
+         convolution_buffer_local[0][2] <= convolution_previous_read[1][15:8];
+         convolution_buffer_local[1][2] <= convolution_previous_read[0][7:0];
+         convolution_buffer_local[2][2] <= convolution_previous_read[0][15:8];
+         convolution_buffer_local[3][2] <= data_read[7:0];
+      end
+   end
+   STATE_PROC_CONVOLUTION_CALCULATION: begin : conv_proc
+      reg [15:0] temp_calc; //used for calculations
+
+      //convolution for the first byte
+      if(counter_convolution_y_write == 0 || counter_convolution_y_write >= img_height-1 || counter_convolution_x_write == 0) begin
+         data_write[7:0] <= 0;
+      end else begin
+         temp_calc = 0;
+
+         // temp_calc = temp_calc + convolution_matrix[0]*data_read[7:0];
+         if(matrix_convolution_counter == 0) begin
+            temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer_local[0][0]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 1) begin
+            temp_calc = calc_left_buf;
+            temp_calc = temp_calc + convolution_matrix[1]*{8'b0, convolution_buffer_local[1][0]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 2) begin
+            temp_calc = calc_left_buf;
+            temp_calc = temp_calc + convolution_matrix[2]*{8'b0, convolution_buffer_local[2][0]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 3) begin
+            temp_calc = calc_left_buf;
+            temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer_local[0][1]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 4) begin
+            temp_calc = calc_left_buf;
+            temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer_local[1][1]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 5) begin
+            temp_calc = calc_left_buf;
+            temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer_local[2][1]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 6) begin
+            temp_calc = calc_left_buf;
+            temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_buffer_local[0][2]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 7) begin
+            temp_calc = calc_left_buf;
+            temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_buffer_local[1][2]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 8) begin
+            temp_calc = calc_left_buf;
+            temp_calc = temp_calc + convolution_matrix[8]*{8'b0, convolution_buffer_local[2][2]};
+            calc_left_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 9) begin
+            temp_calc = calc_left_buf;
+         end
+         // temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0]+1)%2]};
+         // temp_calc = temp_calc + convolution_matrix[1]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0]+1)%2]};
+         // temp_calc = temp_calc + convolution_matrix[2]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0]+1)%2]};
+         // temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0])]};
+         // temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0])]};
+         // temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0])]};
+         // //last line still not written to the buffer
+         // temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_previous_read[1][15:8]};
+         // temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_previous_read[0][7:0]};
+         // temp_calc = temp_calc + convolution_matrix[8]*{8'b0, convolution_previous_read[0][15:8]};
+
+
+         temp_calc[7:0] = apply_clamp_fixed16(temp_calc, clamp);
+         //convolution_data_to_add is either the value already existing at this address, or 0 (depends on param)
+         data_write[7:0] <= apply_clamp({8'b0, convolution_data_to_add[7:0]}+{8'b0, temp_calc[7:0]}, 1);
+      end
+
+      if(counter_convolution_y_write == 0 || counter_convolution_y_write >= img_height-1 || counter_convolution_x_write >= img_width-2) begin
+         data_write[15:8] <= 0;
+      end else begin
+
+         temp_calc = 0;
+         if(matrix_convolution_counter == 1) begin
+            temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer_local[1][0]};
+            calc_right_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 2) begin
+            temp_calc = calc_right_buf;
+            temp_calc = temp_calc + convolution_matrix[1]*{8'b0, convolution_buffer_local[2][0]};
+            calc_right_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 3) begin
+            temp_calc = calc_right_buf;
+            temp_calc = temp_calc + convolution_matrix[2]*{8'b0, convolution_buffer_local[3][0]};
+            calc_right_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 4) begin
+            temp_calc = calc_right_buf;
+            temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer_local[1][1]};
+            calc_right_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 5) begin
+            temp_calc = calc_right_buf;
+            temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer_local[2][1]};
+            calc_right_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 6) begin
+            temp_calc = calc_right_buf;
+            temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer_local[3][1]};
+            calc_right_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 7) begin
+            temp_calc = calc_right_buf;
+            temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_buffer_local[1][2]};
+            calc_right_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 8) begin
+            temp_calc = calc_right_buf;
+            temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_buffer_local[2][2]};
+            calc_right_buf <= temp_calc;
+         end else if (matrix_convolution_counter == 9) begin
+            temp_calc = calc_right_buf;
+            temp_calc = temp_calc + convolution_matrix[8]*{8'b0, convolution_buffer_local[3][2]};
+         end
+         // temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0]+1)%2]};
+         // temp_calc = temp_calc + convolution_matrix[1]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0]+1)%2]};
+         // temp_calc = temp_calc + convolution_matrix[2]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0]+1)%2]};
+         // temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0])]};
+         // temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0])]};
+         // temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0])]};
+         // //last line not in buffer
+         // temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_previous_read[0][7:0]};
+         // temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_previous_read[0][15:8]};
+         // temp_calc = temp_calc + convolution_matrix[8]*{8'b0, data_read[7:0]};
+
+         temp_calc[7:0] = apply_clamp_fixed16(temp_calc, clamp);
+         data_write[15:8] <= apply_clamp({8'b0, convolution_data_to_add[15:8]}+{8'b0, temp_calc[7:0]}, 1);
+
+      end
+      if(matrix_convolution_counter == 9) begin
+         state_processing <= STATE_PROC_CONVOLUTION_WRITEBACK_1;
+      end else begin
+         matrix_convolution_counter <= matrix_convolution_counter + 1;
+      end
+   end
+   STATE_PROC_CONVOLUTION_WRITEBACK_1: begin
+      convolution_buffer[convolution_previous_read_counter_x[1][7:0]][convolution_previous_read_counter_y[1][0]] <= convolution_previous_read[1][7:0];
+      state_processing <= STATE_PROC_CONVOLUTION_WRITEBACK_2;
+   end
+   STATE_PROC_CONVOLUTION_WRITEBACK_2: begin
+      //keep the current read in a buffer before putting it in the convolution buffer because we read data 2 by 2 and we need 3x3 matrices
+      convolution_previous_read[0] <= data_read_store;
+      convolution_previous_read_counter_x[0] <= counter_convolution_x;
+      convolution_previous_read_counter_y[0] <= counter_convolution_y;
+
+      convolution_previous_read[1] <= convolution_previous_read[0];
+      convolution_previous_read_counter_x[1] <= convolution_previous_read_counter_x[0];
+      convolution_previous_read_counter_y[1] <= convolution_previous_read_counter_y[0];
+
+      convolution_buffer[convolution_previous_read_counter_x[1][7:0]+1][convolution_previous_read_counter_y[1][0]] <= convolution_previous_read[1][15:8];
+
+      //counts the reads and increment y reg when x has sweept the width
+      if(counter_convolution_x+2 >= img_width) begin
+         counter_convolution_x <= 0;
+         counter_convolution_y <= counter_convolution_y + 1;
+      end else begin
+         counter_convolution_x <= counter_convolution_x + 2;
+      end
+
+      if(counter_convolution_y == 0 || (counter_convolution_y == 1 && counter_convolution_x == 0)) begin
+         //first/last lines and borders are 0
+         wr_en <= 0;
+      end else begin
+         wr_en <= 1;
+         proc_conv_memory_addr_write <= proc_conv_memory_addr_write + 2; //reads 2x8bits
+
+         //offset between read and write
+         //only update write counter when there is an actual write
+         if(counter_convolution_x_write+2 >= img_width) begin
+            counter_convolution_x_write <= 0;
+            counter_convolution_y_write <= counter_convolution_y_write + 1;
          end else begin
-            counter_convolution_x <= counter_convolution_x + 2;
+            counter_convolution_x_write <= counter_convolution_x_write + 2;
          end
 
-         if(counter_convolution_y == 0 || (counter_convolution_y == 1 && counter_convolution_x == 0)) begin
-            //first/last lines and borders are 0
-            wr_en <= 0;
-         end else begin
-            wr_en <= 1;
-            proc_conv_memory_addr_write <= proc_conv_memory_addr_write + 2; //reads 2x8bits
+      end
 
-            //offset between read and write
-            //only update write counter when there is an actual write
-            if(counter_convolution_x_write+2 >= img_width) begin
-               counter_convolution_x_write <= 0;
-               counter_convolution_y_write <= counter_convolution_y_write + 1;
-            end else begin
-               counter_convolution_x_write <= counter_convolution_x_write + 2;
-            end
+      addr <= {proc_conv_memory_addr_write[31:1], 1'b0};
 
-         end
+      //will cause the next read
+      proc_conv_memory_addr_read <= proc_conv_memory_addr_read + 1;
 
-         addr <= {proc_conv_memory_addr_write[31:1], 1'b0};
+      convolution_reading_data <= 2'b00;
 
-         //convolution for the first byte
-         if(counter_convolution_y_write == 0 || counter_convolution_y_write >= img_height-1 || counter_convolution_x_write == 0) begin
-            data_write[7:0] <= 0;
-         end else begin
-            temp_calc = 0;
-            temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0]+1)%2]};
-            temp_calc = temp_calc + convolution_matrix[1]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0]+1)%2]};
-            temp_calc = temp_calc + convolution_matrix[2]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0]+1)%2]};
-            temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0])]};
-            temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0])]};
-            temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0])]};
-            //last line still not written to the buffer
-            temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_previous_read[1][15:8]};
-            temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_previous_read[0][7:0]};
-            temp_calc = temp_calc + convolution_matrix[8]*{8'b0, convolution_previous_read[0][15:8]};
-
-            temp_calc[7:0] = apply_clamp_fixed16(temp_calc, clamp);
-            //convolution_data_to_add is either the value already existing at this address, or 0 (depends on param)
-            data_write[7:0] <= apply_clamp({8'b0, convolution_data_to_add[7:0]}+{8'b0, temp_calc[7:0]}, 1);
-         end
-
-         if(counter_convolution_y_write == 0 || counter_convolution_y_write >= img_height-1 || counter_convolution_x_write >= img_width-2) begin
-            data_write[15:8] <= 0;
-         end else begin
-
-            temp_calc = 0;
-            temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0]+1)%2]};
-            temp_calc = temp_calc + convolution_matrix[1]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0]+1)%2]};
-            temp_calc = temp_calc + convolution_matrix[2]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0]+1)%2]};
-            temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0])]};
-            temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0])]};
-            temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0])]};
-            //last line not in buffer
-            temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_previous_read[0][7:0]};
-            temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_previous_read[0][15:8]};
-            temp_calc = temp_calc + convolution_matrix[8]*{8'b0, data_read[7:0]};
-
-            temp_calc[7:0] = apply_clamp_fixed16(temp_calc, clamp);
-            data_write[15:8] <= apply_clamp({8'b0, convolution_data_to_add[15:8]}+{8'b0, temp_calc[7:0]}, 1);
-
-         end
-
-         //will cause the next read
-         proc_conv_memory_addr_read <= proc_conv_memory_addr_read + 1;
-
-         convolution_reading_data <= 2'b00;
-
-         //end condition
-         if(counter_convolution_y >= img_height+1 && counter_convolution_x+2 >= img_width)begin
-            state_processing <= STATE_IDLE;
-         end
+      //end condition
+      if(counter_convolution_y >= img_height+1 && counter_convolution_x+2 >= img_width)begin
+         state_processing <= STATE_IDLE;
+      end else begin
+         state_processing <= STATE_PROC_CONVOLUTION;
       end
    end
    default: begin

@@ -15,6 +15,24 @@
 #include "../ice40/software/image_processing_ice40.hpp"
 #endif
 
+void test_send_read(uint8_t *image_input, uint8_t *image_output, Image_processing *img_proc){
+   img_proc->send_params(image_width, image_height);
+   uint8_t status[4];
+   img_proc->read_status(status);
+   printf("after send params\n");
+   for (size_t i = 0; i < 4; i++) {
+      printf("status out %lu : 0x%x\n", i, status[i]);
+   }
+
+   printf("sending image\n");
+   img_proc->send_image(image_input);
+
+   printf("receiving image\n");
+   img_proc->read_image(image_output);
+
+   img_proc->read_status(status);
+}
+
 void test_add_threshold(uint8_t *image_input, uint8_t *image_output, Image_processing *img_proc){
    img_proc->send_params(image_width, image_height);
 
@@ -166,6 +184,7 @@ int main(){
    }
 
    //test selection
+   // test_send_read(image_input, image_output, img_proc);
    // test_add_threshold(image_input, image_output, img_proc);
    // test_binary_add(image_input, image_output, img_proc);
    // test_gaussian_blur(image_input, image_output, img_proc);

@@ -71,3 +71,5 @@ This means the values can go from -7.0 to 7.0 with a precision of 0.0625 (1/2^4)
 Verilator 3.874
 
 gnuplot 5.0
+
+yosys 0.9

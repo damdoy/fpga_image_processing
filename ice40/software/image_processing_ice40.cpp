@@ -80,8 +80,12 @@ void Image_processing_ice40::send_image(uint8_t *image){
 }
 
 void Image_processing_ice40::send_add(int16_t value, bool clamp){
-   // uint8_t add_value8[2] = {value&0xFF, (value>>8)&0xFF};
-   //
+   uint8_t add_value8[2] = {value&0xFF, (value>>8)&0xFF};
+
+   spi_command_send(SPI_SEND_CMD, COMMAND_APPLY_ADD);
+   spi_command_send(SPI_SEND_DATA, add_value8[0]);
+   spi_command_send(SPI_SEND_DATA, add_value8[1]);
+   spi_command_send(SPI_SEND_DATA, clamp);
    // fifo_in.push(Operation(true, COMMAND_APPLY_ADD, 0));
    // fifo_in.push(Operation(false, COMMAND_NONE, add_value8[0]));
    // fifo_in.push(Operation(false, COMMAND_NONE, add_value8[1]));
@@ -93,6 +97,11 @@ void Image_processing_ice40::send_add(int16_t value, bool clamp){
 }
 
 void Image_processing_ice40::send_threshold(uint8_t threshold_value, uint8_t replacement_value, bool upper_selection){
+
+   spi_command_send(SPI_SEND_CMD, COMMAND_APPLY_THRESHOLD);
+   spi_command_send(SPI_SEND_DATA, threshold_value);
+   spi_command_send(SPI_SEND_DATA, replacement_value);
+   spi_command_send(SPI_SEND_DATA, upper_selection);
    // fifo_in.push(Operation(true, COMMAND_APPLY_THRESHOLD, 0));
    // fifo_in.push(Operation(false, COMMAND_NONE, threshold_value));
    // fifo_in.push(Operation(false, COMMAND_NONE, replacement_value));
@@ -171,6 +180,13 @@ void Image_processing_ice40::wait_end_busy(){
    //    }
    //    printf("wait_end_busy\n");
    // } while( (status_out[0]&0x01 == 1) );
+
+   uint8_t status_out[4];
+
+   do{
+      read_status(status_out);
+      printf("wait_end_busy\n");
+   } while( (status_out[0]&0x01 == 1) );
 }
 
 void Image_processing_ice40::read_image(uint8_t* image_out){
@@ -204,6 +220,7 @@ void Image_processing_ice40::read_image(uint8_t* image_out){
 }
 
 void Image_processing_ice40::switch_buffers(){
+   spi_command_send(SPI_SEND_CMD, COMMAND_SWITCH_BUFFERS);
    // fifo_in.push(Operation(true, COMMAND_SWITCH_BUFFERS, 0));
    //
    // for (size_t i = 0; i < 10; i++) {
