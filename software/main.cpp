@@ -4,6 +4,7 @@
 
 // #include "images/image_fruits_128.h"
 #include "images/image_fruits_64.h"
+// #include "images/image_fruits_16.h"
 // #include "images/image_fruits_8.h"
 // #include "images/image_sequential.h"
 

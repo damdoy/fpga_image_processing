@@ -595,11 +595,13 @@ begin
             rd_en <= 1;
             addr <= buffer_storage_address+proc_memory_addr_counter;
             buffer_read <= data_read;
+            // buffer_read <= 16'h2020;
             binary_read_buffer <= 0;
             proc_memory_addr_counter <= proc_memory_addr_counter + 1;
          end
       end else begin
          if (data_read_valid == 1'b1) begin
+            temp_calc = 0;
             wr_en <= 1;
             addr <= buffer_storage_address+{proc_memory_addr_counter[31:1], 1'b0};
 

@@ -174,6 +174,7 @@ void Image_processing_simulation::read_image(uint8_t* image_out){
    for (size_t i = 0; i < image_width*image_height; i++) {
       if(!fifo_out.empty()){
          image_out[i] = fifo_out.front();
+         printf("read %d: 0x%x\n", i, image_out[i]);
          fifo_out.pop();
       }
    }
