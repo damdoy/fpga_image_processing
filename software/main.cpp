@@ -119,7 +119,7 @@ void test_simple_edge_detection(uint8_t *image_input, uint8_t *image_output, Ima
    //top gradient
    {
       uint8_t conv_kernel[9] = {(1)<<3, (1)<<4, (1)<<3, (0)<<4, ((0)<<4), (0)<<4,  (-1)<<3, (-1)<<4, (-1)<<3};
-      img_proc->send_convolution(conv_kernel, true, true, true);
+      img_proc->send_convolution(conv_kernel, true, true, false);
    }
    img_proc->wait_end_busy();
 

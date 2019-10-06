@@ -213,7 +213,7 @@ void Image_processing_simulation::send_convolution(uint8_t *kernel, bool clamp, 
 }
 
 void Image_processing_simulation::send_clear(uint8_t value){
-   this->send_threshold(0, value, false);
+   this->send_threshold(0, value, true);
 }
 
 

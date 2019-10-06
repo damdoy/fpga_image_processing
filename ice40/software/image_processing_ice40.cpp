@@ -115,7 +115,7 @@ void Image_processing_ice40::send_mult(float value, bool clamp){
       }
    }
 
-   spi_command_send(SPI_SEND_CMD, COMMAND_APPLY_INVERT);
+   spi_command_send(SPI_SEND_CMD, COMMAND_APPLY_MULT);
    spi_command_send(SPI_SEND_DATA, val_fixed_4_4);
    spi_command_send(SPI_SEND_DATA, clamp);
 }
@@ -168,5 +168,5 @@ void Image_processing_ice40::send_convolution(uint8_t *kernel, bool clamp, bool 
 }
 
 void Image_processing_ice40::send_clear(uint8_t value){
-   this->send_threshold(0, value, false);
+   this->send_threshold(0, value, true);
 }

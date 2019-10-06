@@ -7,14 +7,14 @@
 // wire [15:0] ip_mem_data_read;
 // wire ip_mem_data_read_valid;
 
-module ram_interface(input clk, input [31:0] addr, input wr_en, input rd_en, input [15:0] data_write, output [15:0] data_read, output data_read_valid);
+module ram_interface(input clk, input [31:0] addr, input wr_en, input rd_en, input [15:0] data_write, output reg [15:0] data_read, output reg data_read_valid);
 
    wire ram_wren [3:0];
 
    wire [15:0] ram_data_out [3:0];
 
-   reg [1:0] output_mux;
-   reg rd_en_buffer;
+   reg [1:0] output_mux [1:0];
+   reg rd_en_buffer[2:0];
 
 
    SB_SPRAM256KA spram0
@@ -73,14 +73,17 @@ module ram_interface(input clk, input [31:0] addr, input wr_en, input rd_en, inp
       .DATAOUT(ram_data_out[3])
    );
 
-   assign data_read = ram_data_out[output_mux];
    assign ram_wren[addr[16:15]] = wr_en;
 
    always @(posedge clk)
    begin
-      output_mux <= addr[16:15];
-      rd_en_buffer <= rd_en;
-      data_read_valid <= (rd_en_buffer == 0 && rd_en == 1);
+      output_mux[0] <= addr[16:15];
+      output_mux[1] <= output_mux[0];
+      rd_en_buffer[0] <= rd_en;
+      rd_en_buffer[1] <= rd_en_buffer[0];
+      rd_en_buffer[2] <= rd_en_buffer[1];
+      data_read_valid <= (rd_en_buffer[2] == 0 && rd_en_buffer[1] == 1);
+      data_read <= ram_data_out[output_mux[1]];
    end
 
 endmodule

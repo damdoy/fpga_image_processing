@@ -95,6 +95,7 @@ reg [31:0] proc_conv_memory_addr_read;
 reg [31:0] proc_conv_memory_addr_write;
 
 reg binary_read_buffer;
+reg operation_step;
 
 //will keep the previous lines for convolution
 reg [7:0] convolution_buffer [0:CONVOLUTION_LINE_MAX_SIZE-1][0:1];
@@ -530,13 +531,10 @@ begin
          proc_memory_addr_counter <= proc_memory_addr_counter+1;
       end else begin
          if (data_read_valid == 1'b1) begin
-            wr_en <= 1;
-            addr <= {proc_memory_addr_counter[31:1], 1'b0};
 
             if(processing_command == COMMAND_APPLY_ADD)begin
                temp_calc = {8'b0, data_read[7:0]}+add_value;
                data_write[7:0] <= apply_clamp(temp_calc, clamp);
-
                temp_calc = {8'b0, data_read[15:8]}+add_value;
                data_write[15:8] <= apply_clamp(temp_calc, clamp);
             end else if(processing_command == COMMAND_APPLY_THRESHOLD) begin
@@ -561,18 +559,20 @@ begin
             end else if(processing_command == COMMAND_APPLY_POW) begin
                temp_calc = {7'b0, data_read[7:0], 1'b0}; //TODO: this is not a pow
                data_write[7:0] <= apply_clamp(temp_calc, clamp);
-
                temp_calc = {7'b0, data_read[15:8], 1'b0};
                data_write[15:8] <= apply_clamp(temp_calc, clamp);
             end else if(processing_command == COMMAND_APPLY_SQRT) begin
                data_write[7:0] <= {1'b0, data_read[7:1]}; //TODO: this is not a sqrt
                data_write[15:8] <= {1'b0, data_read[15:9]};
             end else if(processing_command == COMMAND_APPLY_MULT) begin
-               temp_calc = mult_value_param*data_read[7:0];
+               temp_calc = {8'b0, mult_value_param}*{8'b0, data_read[7:0]};
                data_write[7:0] <= apply_clamp_fixed16(temp_calc, clamp);
-               temp_calc = mult_value_param*data_read[15:8];
+               temp_calc = {8'b0, mult_value_param}*{8'b0, data_read[15:8]};
                data_write[15:8] <= apply_clamp_fixed16(temp_calc, clamp);
             end
+
+            wr_en <= 1;
+            addr <= {proc_memory_addr_counter[31:1], 1'b0};
 
             proc_memory_addr_counter <= proc_memory_addr_counter+1;
             if(proc_counter_read > 2) begin // > 2 and not 0 because we are shifted by one
@@ -588,40 +588,54 @@ begin
       //assume single port ram
       if(proc_memory_addr_counter[0] == 1'b0 && binary_read_buffer == 0) begin
          rd_en <= 1;
-         addr <= buffer_input_address+proc_memory_addr_counter;
+         //must read the buffer storage first o/w seems to be problems with the writeback (timing constraints?)
+         addr <= buffer_storage_address+proc_memory_addr_counter;
          binary_read_buffer <= 1;
       end if (proc_memory_addr_counter[0] == 1'b0 && binary_read_buffer == 1) begin
          if (data_read_valid == 1'b1) begin
-            rd_en <= 1;
-            addr <= buffer_storage_address+proc_memory_addr_counter;
             buffer_read <= data_read;
-            // buffer_read <= 16'h2020;
+            rd_en <= 1;
+            addr <= buffer_input_address+proc_memory_addr_counter;
             binary_read_buffer <= 0;
             proc_memory_addr_counter <= proc_memory_addr_counter + 1;
+            operation_step <= 0;
+
          end
       end else begin
-         if (data_read_valid == 1'b1) begin
+         //separated into two steps due to what seemed to be timing constraints
+         if (data_read_valid == 1'b1 && operation_step == 0) begin
             temp_calc = 0;
-            wr_en <= 1;
-            addr <= buffer_storage_address+{proc_memory_addr_counter[31:1], 1'b0};
 
             if( processing_command == COMMAND_BINARY_ADD) begin
                temp_calc = {8'b0, buffer_read[7:0]} + {8'b0, data_read[7:0]};
                data_write[7:0] <= apply_clamp(temp_calc, clamp);
-               temp_calc = {8'b0, buffer_read[15:8]} + {8'b0, data_read[15:8]};
-               data_write[15:8] <= apply_clamp(temp_calc, clamp);
             end else if (processing_command == COMMAND_BINARY_SUB) begin
                temp_calc = {8'b0, buffer_read[7:0]} - {8'b0, data_read[7:0]};
                data_write[7:0] <= apply_clamp(temp_calc, clamp);
-               temp_calc = {8'b0, buffer_read[15:8]} - {8'b0, data_read[15:8]};
-               data_write[15:8] <= apply_clamp(temp_calc, clamp);
             end else if (processing_command == COMMAND_BINARY_MULT) begin
                temp_calc = {8'b0, buffer_read[7:0]} * {8'b0, data_read[7:0]};
                data_write[7:0] <= apply_clamp(temp_calc, clamp);
+            end
+
+            operation_step <= 1;
+
+         end else if (operation_step == 1) begin
+
+            wr_en <= 1;
+            addr <= buffer_storage_address+{proc_memory_addr_counter[31:1], 1'b0};
+
+            if( processing_command == COMMAND_BINARY_ADD) begin
+               temp_calc = {8'b0, buffer_read[15:8]} + {8'b0, data_read[15:8]};
+               data_write[15:8] <= apply_clamp(temp_calc, clamp);
+            end else if (processing_command == COMMAND_BINARY_SUB) begin
+               temp_calc = {8'b0, buffer_read[15:8]} - {8'b0, data_read[15:8]};
+               data_write[15:8] <= apply_clamp(temp_calc, clamp);
+            end else if (processing_command == COMMAND_BINARY_MULT) begin
                temp_calc = {8'b0, buffer_read[15:8]} * {8'b0, data_read[15:8]};
                data_write[15:8] <= apply_clamp(temp_calc, clamp);
             end
 
+            operation_step <= 0;
             proc_memory_addr_counter <= proc_memory_addr_counter+1;
 
             if(proc_counter_read > 2) begin // > 2 and not 0 because we are shifted by one
