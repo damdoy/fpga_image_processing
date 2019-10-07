@@ -101,22 +101,6 @@ void Image_processing_simulation::send_image_invert(){
    }
 }
 
-void Image_processing_simulation::send_pow(){
-   fifo_in.push(Operation(true, COMMAND_APPLY_POW, 0));
-
-   for (size_t i = 0; i < 10; i++) {
-      main_loop_clk();
-   }
-}
-
-void Image_processing_simulation::send_sqrt(){
-   fifo_in.push(Operation(true, COMMAND_APPLY_SQRT, 0));
-
-   for (size_t i = 0; i < 10; i++) {
-      main_loop_clk();
-   }
-}
-
 void Image_processing_simulation::send_mult(float value, bool clamp){
    uint8_t val_fixed_4_4 = 0;
    if( value < 0 ){
@@ -191,6 +175,24 @@ void Image_processing_simulation::switch_buffers(){
 
 void Image_processing_simulation::send_binary_add(bool clamp){
    fifo_in.push(Operation(true, COMMAND_BINARY_ADD, 0));
+   fifo_in.push(Operation(false, COMMAND_NONE, clamp));
+
+   for (size_t i = 0; i < 100; i++) {
+      main_loop_clk();
+   }
+}
+
+void Image_processing_simulation::send_binary_sub(bool clamp, bool absolute_diff){
+   fifo_in.push(Operation(true, COMMAND_BINARY_SUB, 0));
+   fifo_in.push(Operation(false, COMMAND_NONE, (absolute_diff<<1)+clamp));
+
+   for (size_t i = 0; i < 100; i++) {
+      main_loop_clk();
+   }
+}
+
+void Image_processing_simulation::send_binary_mult(bool clamp){
+   fifo_in.push(Operation(true, COMMAND_BINARY_MULT, 0));
    fifo_in.push(Operation(false, COMMAND_NONE, clamp));
 
    for (size_t i = 0; i < 100; i++) {

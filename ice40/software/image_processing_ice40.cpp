@@ -94,12 +94,6 @@ void Image_processing_ice40::send_image_invert(){
    spi_command_send(SPI_SEND_CMD, COMMAND_APPLY_INVERT);
 }
 
-void Image_processing_ice40::send_pow(){
-}
-
-void Image_processing_ice40::send_sqrt(){
-}
-
 void Image_processing_ice40::send_mult(float value, bool clamp){
    uint8_t val_fixed_4_4 = 0;
    if( value < 0 ){
@@ -157,6 +151,17 @@ void Image_processing_ice40::send_binary_add(bool clamp){
    spi_command_send(SPI_SEND_CMD, COMMAND_BINARY_ADD);
    spi_command_send(SPI_SEND_DATA, clamp);
 }
+
+void Image_processing_ice40::send_binary_sub(bool clamp, bool absolute_diff){
+   spi_command_send(SPI_SEND_CMD, COMMAND_BINARY_SUB);
+   spi_command_send(SPI_SEND_DATA, (absolute_diff<<1)+clamp);
+}
+
+void Image_processing_ice40::send_binary_mult(bool clamp){
+   spi_command_send(SPI_SEND_CMD, COMMAND_BINARY_MULT);
+   spi_command_send(SPI_SEND_DATA, clamp);
+}
+
 
 void Image_processing_ice40::send_convolution(uint8_t *kernel, bool clamp, bool input_source, bool add_to_output){
    spi_command_send(SPI_SEND_CMD, COMMAND_CONVOLUTION);

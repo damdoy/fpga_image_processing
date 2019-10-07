@@ -163,6 +163,21 @@ void test_multiplication(uint8_t *image_input, uint8_t *image_output, Image_proc
    img_proc->read_image(image_output);
 }
 
+void test_binary_diff(uint8_t *image_input, uint8_t *image_output, Image_processing *img_proc){
+   img_proc->send_params(image_width, image_height);
+   img_proc->send_image(image_input); //in input buffer
+
+   img_proc->send_clear(128);
+   img_proc->wait_end_busy();
+
+   img_proc->send_binary_sub(true, true);
+   // img_proc->send_binary_add(true);
+   img_proc->wait_end_busy();
+
+   img_proc->switch_buffers();
+   img_proc->read_image(image_output);
+}
+
 int main(){
    FILE *output_file = fopen("output.dat", "w");
 
@@ -189,8 +204,9 @@ int main(){
    // test_add_threshold(image_input, image_output, img_proc);
    // test_binary_add(image_input, image_output, img_proc);
    // test_gaussian_blur(image_input, image_output, img_proc);
-   test_simple_edge_detection(image_input, image_output, img_proc);
+   // test_simple_edge_detection(image_input, image_output, img_proc);
    // test_multiplication(image_input, image_output, img_proc);
+   test_binary_diff(image_input, image_output, img_proc);
 
    // test_simulation(image_input, image_output);
 

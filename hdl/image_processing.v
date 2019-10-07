@@ -36,8 +36,7 @@ parameter STATE_IDLE = 0, STATE_WAIT_COMMAND = STATE_IDLE+1, STATE_READ_COMMAND_
           STATE_THRESHOLD_READ_PARAM = STATE_APPLY_ADD+1, STATE_PROC_THRESHOLD = STATE_THRESHOLD_READ_PARAM+1,
           STATE_BINARY_ADD_READ_PARAM = STATE_PROC_THRESHOLD+1, STATE_PROC_BINARY = STATE_BINARY_ADD_READ_PARAM+1,
           STATE_APPLY_INVERT_READ_PARAM = STATE_PROC_BINARY+1, STATE_PROC_UNARY = STATE_APPLY_INVERT_READ_PARAM+1,
-          STATE_APPLY_POW_READ_PARAM = STATE_PROC_UNARY+1,
-          STATE_CONVOLUTION_READ_PARAM = STATE_APPLY_POW_READ_PARAM+1, STATE_PROC_CONVOLUTION = STATE_CONVOLUTION_READ_PARAM+1,
+          STATE_CONVOLUTION_READ_PARAM = STATE_PROC_UNARY+1, STATE_PROC_CONVOLUTION = STATE_CONVOLUTION_READ_PARAM+1,
           STATE_BINARY_SUB_READ_PARAM = STATE_PROC_CONVOLUTION+1, STATE_BINARY_MULT_READ_PARAM = STATE_BINARY_SUB_READ_PARAM+1,
           STATE_APPLY_MULT_READ_PARAM = STATE_BINARY_MULT_READ_PARAM+1, STATE_APPLY_MULT = STATE_APPLY_MULT_READ_PARAM+1,
           STATE_PROC_CONVOLUTION_CALCULATION = STATE_APPLY_MULT+1, STATE_PROC_CONVOLUTION_WRITEBACK_1 = STATE_PROC_CONVOLUTION_CALCULATION+1,
@@ -64,8 +63,8 @@ reg [7:0] processing_command;
 parameter COMMAND_PARAM = 0, COMMAND_SEND_IMG = COMMAND_PARAM+1, COMMAND_READ_IMG = COMMAND_SEND_IMG+1,
           COMMAND_GET_STATUS = COMMAND_READ_IMG+1, COMMAND_APPLY_ADD = COMMAND_GET_STATUS+1, COMMAND_APPLY_THRESHOLD = COMMAND_APPLY_ADD+1,
           COMMAND_SWITCH_BUFFERS = COMMAND_APPLY_THRESHOLD+1, COMMAND_BINARY_ADD = COMMAND_SWITCH_BUFFERS+1,
-          COMMAND_APPLY_INVERT = COMMAND_BINARY_ADD+1, COMMAND_APPLY_POW = COMMAND_APPLY_INVERT+1, COMMAND_APPLY_SQRT = COMMAND_APPLY_POW+1,
-          COMMAND_CONVOLUTION = COMMAND_APPLY_SQRT+1, COMMAND_BINARY_SUB = COMMAND_CONVOLUTION+1, COMMAND_BINARY_MULT = COMMAND_BINARY_SUB+1,
+          COMMAND_APPLY_INVERT = COMMAND_BINARY_ADD+1,
+          COMMAND_CONVOLUTION = COMMAND_APPLY_INVERT+1, COMMAND_BINARY_SUB = COMMAND_CONVOLUTION+1, COMMAND_BINARY_MULT = COMMAND_BINARY_SUB+1,
           COMMAND_APPLY_MULT = COMMAND_BINARY_MULT+1;
 
 //systemverilog enum
@@ -129,6 +128,7 @@ reg [15:0] img_height;
 
 reg [15:0] add_value;
 reg clamp;
+reg absolute_diff;
 reg convolution_source_input;
 reg convolution_add_to_result;
 
@@ -264,24 +264,12 @@ begin
             proc_counter_read <= img_width*img_height;
             proc_memory_addr_counter <= buffer_storage_address;
          end
-         COMMAND_APPLY_POW: begin
-            state <= STATE_APPLY_POW_READ_PARAM;
-            counter_read <= 0;
-         end
-         COMMAND_APPLY_SQRT: begin
-            state <= STATE_WAIT_COMMAND;
-            state_processing <= STATE_PROC_UNARY;
-            processing_command <= COMMAND_APPLY_SQRT;
-            counter_read <= 0;
-            proc_counter_read <= img_width*img_height;
-            proc_memory_addr_counter <= buffer_storage_address;
-         end
          COMMAND_CONVOLUTION: begin
             state <= STATE_CONVOLUTION_READ_PARAM;
             counter_read <= 9;
          end
          COMMAND_BINARY_SUB: begin
-            state <= STATE_BINARY_ADD_READ_PARAM;
+            state <= STATE_BINARY_SUB_READ_PARAM;
             counter_read <= 0;
          end
          COMMAND_APPLY_MULT: begin
@@ -374,8 +362,6 @@ begin
             processing_command <= COMMAND_APPLY_ADD;
             state <= STATE_WAIT_COMMAND;
             proc_counter_read <= img_width*img_height;
-            // proc_counter_read <= 20;
-            // memory_addr_counter <= 0;
             proc_memory_addr_counter <= buffer_storage_address;
          end
       end
@@ -438,16 +424,6 @@ begin
          binary_read_buffer <= 0;
       end
    end
-   STATE_APPLY_POW_READ_PARAM: begin
-      if(comm_data_in_valid == 1)begin
-         state_processing <= STATE_PROC_UNARY;
-         processing_command <= COMMAND_APPLY_POW;
-         state <= STATE_WAIT_COMMAND;
-         clamp <= comm_data_in[0];
-         proc_counter_read <= img_width*img_height;
-         proc_memory_addr_counter <= 0; //offset
-      end
-   end
    STATE_CONVOLUTION_READ_PARAM: begin
       if(comm_data_in_valid == 1) begin
          if(counter_read == 9)begin //first value are gneral params
@@ -486,6 +462,7 @@ begin
          processing_command <= COMMAND_BINARY_SUB;
          state <= STATE_WAIT_COMMAND;
          clamp <= comm_data_in[0];
+         absolute_diff <= comm_data_in[1];
          proc_counter_read <= img_width*img_height;
          proc_memory_addr_counter <= 0; //offset
          binary_read_buffer <= 0;
@@ -556,14 +533,6 @@ begin
                end
             end else if(processing_command == COMMAND_APPLY_INVERT) begin
                data_write <= ~data_read;
-            end else if(processing_command == COMMAND_APPLY_POW) begin
-               temp_calc = {7'b0, data_read[7:0], 1'b0}; //TODO: this is not a pow
-               data_write[7:0] <= apply_clamp(temp_calc, clamp);
-               temp_calc = {7'b0, data_read[15:8], 1'b0};
-               data_write[15:8] <= apply_clamp(temp_calc, clamp);
-            end else if(processing_command == COMMAND_APPLY_SQRT) begin
-               data_write[7:0] <= {1'b0, data_read[7:1]}; //TODO: this is not a sqrt
-               data_write[15:8] <= {1'b0, data_read[15:9]};
             end else if(processing_command == COMMAND_APPLY_MULT) begin
                temp_calc = {8'b0, mult_value_param}*{8'b0, data_read[7:0]};
                data_write[7:0] <= apply_clamp_fixed16(temp_calc, clamp);
@@ -611,6 +580,9 @@ begin
                data_write[7:0] <= apply_clamp(temp_calc, clamp);
             end else if (processing_command == COMMAND_BINARY_SUB) begin
                temp_calc = {8'b0, buffer_read[7:0]} - {8'b0, data_read[7:0]};
+               if(absolute_diff == 1 && $signed(temp_calc) < 0) begin
+                  temp_calc = -temp_calc;
+               end
                data_write[7:0] <= apply_clamp(temp_calc, clamp);
             end else if (processing_command == COMMAND_BINARY_MULT) begin
                temp_calc = {8'b0, buffer_read[7:0]} * {8'b0, data_read[7:0]};
@@ -629,6 +601,9 @@ begin
                data_write[15:8] <= apply_clamp(temp_calc, clamp);
             end else if (processing_command == COMMAND_BINARY_SUB) begin
                temp_calc = {8'b0, buffer_read[15:8]} - {8'b0, data_read[15:8]};
+               if(absolute_diff == 1 && $signed(temp_calc) < 0) begin
+                  temp_calc = -temp_calc;
+               end
                data_write[15:8] <= apply_clamp(temp_calc, clamp);
             end else if (processing_command == COMMAND_BINARY_MULT) begin
                temp_calc = {8'b0, buffer_read[15:8]} * {8'b0, data_read[15:8]};

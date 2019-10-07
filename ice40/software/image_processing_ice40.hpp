@@ -30,8 +30,6 @@ public:
    virtual void send_add(int16_t value, bool clamp);
    virtual void send_threshold(uint8_t threshold_value, uint8_t replacement, bool upper_selection);
    virtual void send_image_invert();
-   virtual void send_pow();
-   virtual void send_sqrt();
    virtual void send_mult(float value, bool clamp);
 
    virtual void wait_end_busy();
@@ -41,6 +39,8 @@ public:
    virtual void switch_buffers();
 
    virtual void send_binary_add(bool clamp);
+   virtual void send_binary_sub(bool clamp, bool absolute_diff);
+   virtual void send_binary_mult(bool clamp);
    virtual void send_convolution(uint8_t *kernel, bool clamp, bool input_source, bool add_to_output);
    virtual void send_clear(uint8_t value);
 
