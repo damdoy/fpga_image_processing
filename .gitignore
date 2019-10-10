@@ -1,6 +1,7 @@
 obj_dir/
 simu
 output.dat
+soft_ice40
 
 *.asc
 *.bin

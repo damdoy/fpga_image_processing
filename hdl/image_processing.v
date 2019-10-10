@@ -75,6 +75,9 @@ parameter COMMAND_PARAM = 0, COMMAND_SEND_IMG = COMMAND_PARAM+1, COMMAND_READ_IM
 // COMMAND_APPLY_MULT
 // } Commands;
 
+//128KB memory available on spram
+//2*64KB
+//256*256 images assuming 1B/pixel
 parameter MEMORY_SIZE = 1024*128;
 parameter BUFFER_SIZE = MEMORY_SIZE/2;
 parameter BUFFER2_LOCATION = MEMORY_SIZE/2;
@@ -159,7 +162,7 @@ begin
 end
 endfunction
 
-//same as apply_clamp but with a fixed point value
+//same as apply_clamp but with a fixed point value, acts as rounding by taking the [11:4] bits
 function [7:0] apply_clamp_fixed16;
 input [15:0] in;
 input clamp_en;
@@ -219,7 +222,7 @@ begin
       if(comm_data_in_valid == 1)
       begin
          case (comm_cmd)
-         COMMAND_PARAM: begin
+         COMMAND_PARAM: begin //also acts as init
             state <= STATE_READ_COMMAND_PARAM_WIDTH;
             counter_read <= 1; //will be used to read the 16bits
             buffer_storage_address <= BUFFER2_LOCATION;
@@ -266,7 +269,7 @@ begin
          end
          COMMAND_CONVOLUTION: begin
             state <= STATE_CONVOLUTION_READ_PARAM;
-            counter_read <= 9;
+            counter_read <= 9; // will read 10 params
          end
          COMMAND_BINARY_SUB: begin
             state <= STATE_BINARY_SUB_READ_PARAM;
@@ -284,10 +287,10 @@ begin
    STATE_READ_COMMAND_PARAM_WIDTH: begin
       if(comm_data_in_valid == 1)begin
          if(counter_read == 1) begin
-            img_width[7:0] <= comm_data_in; //TODO: verify endianenes
+            img_width[7:0] <= comm_data_in;
             counter_read <= 0;
          end else begin
-            img_width[15:8] <= comm_data_in; //TODO: verify endianenes
+            img_width[15:8] <= comm_data_in;
             state <= STATE_READ_COMMAND_PARAM_HEIGHT;
             counter_read <= 1;
          end
@@ -296,17 +299,17 @@ begin
    STATE_READ_COMMAND_PARAM_HEIGHT: begin
       if(comm_data_in_valid == 1)begin
          if(counter_read == 1) begin
-            img_height[7:0] <= comm_data_in; //TODO: verify endianenes
+            img_height[7:0] <= comm_data_in;
             counter_read <= 0;
          end else begin
-            img_height[15:8] <= comm_data_in; //TODO: verify endianenes
+            img_height[15:8] <= comm_data_in;
             state <= STATE_WAIT_COMMAND; //just wait next command
          end
       end
    end
    STATE_GET_STATUS: begin
       if(comm_data_out_free == 1) begin
-         if(counter_read == 3) begin
+         if(counter_read == 3) begin //first status response is "is_busy"
             comm_data_out_valid <= 1;
             comm_data_out[7:0] <= 8'h11;
             comm_data_out[0] <= ~(state_processing == STATE_IDLE);
@@ -328,7 +331,7 @@ begin
          end
       end
    end
-   STATE_SEND_IMG: begin
+   STATE_SEND_IMG: begin //receives image from the host
       if(comm_data_in_valid == 1) begin
 
          if(memory_addr_counter[0] == 1'b0) begin
@@ -348,6 +351,7 @@ begin
          end
       end
    end
+   //reads the parameters for the add command
    STATE_APPLY_ADD_READ_PARAM: begin
       if(comm_data_in_valid == 1)begin
          if(counter_read == 2) begin
@@ -501,13 +505,13 @@ begin
    end
    STATE_PROC_UNARY: begin : unary
       reg [15:0] temp_calc; //used for calculations
-      //assume single port ram
+      //assume single port ram, reads the data
       if(proc_memory_addr_counter[0] == 1'b0) begin
          rd_en <= 1;
-         addr <= proc_memory_addr_counter;
+         addr <= proc_memory_addr_counter; //set by previous state to be either buffers
          proc_memory_addr_counter <= proc_memory_addr_counter+1;
       end else begin
-         if (data_read_valid == 1'b1) begin
+         if (data_read_valid == 1'b1) begin //received the data, apply the unary operation
 
             if(processing_command == COMMAND_APPLY_ADD)begin
                temp_calc = {8'b0, data_read[7:0]}+add_value;
@@ -540,11 +544,13 @@ begin
                data_write[15:8] <= apply_clamp_fixed16(temp_calc, clamp);
             end
 
+            //write back the data
             wr_en <= 1;
+            //16bits data addressing
             addr <= {proc_memory_addr_counter[31:1], 1'b0};
-
             proc_memory_addr_counter <= proc_memory_addr_counter+1;
-            if(proc_counter_read > 2) begin // > 2 and not 0 because we are shifted by one
+
+            if(proc_counter_read > 2) begin // > 2 and not 0 because we are shifted by one due to clk assignment
                proc_counter_read <= proc_counter_read - 2;
             end else begin
                state_processing <= STATE_IDLE;
@@ -561,14 +567,14 @@ begin
          addr <= buffer_storage_address+proc_memory_addr_counter;
          binary_read_buffer <= 1;
       end if (proc_memory_addr_counter[0] == 1'b0 && binary_read_buffer == 1) begin
+         //reads data from first buffer, issue read for the second buffer, same address
          if (data_read_valid == 1'b1) begin
             buffer_read <= data_read;
             rd_en <= 1;
             addr <= buffer_input_address+proc_memory_addr_counter;
             binary_read_buffer <= 0;
             proc_memory_addr_counter <= proc_memory_addr_counter + 1;
-            operation_step <= 0;
-
+            operation_step <= 0; //binary op done in multiple clk counts due to timing constr.
          end
       end else begin
          //separated into two steps due to what seemed to be timing constraints
@@ -592,10 +598,6 @@ begin
             operation_step <= 1;
 
          end else if (operation_step == 1) begin
-
-            wr_en <= 1;
-            addr <= buffer_storage_address+{proc_memory_addr_counter[31:1], 1'b0};
-
             if( processing_command == COMMAND_BINARY_ADD) begin
                temp_calc = {8'b0, buffer_read[15:8]} + {8'b0, data_read[15:8]};
                data_write[15:8] <= apply_clamp(temp_calc, clamp);
@@ -611,6 +613,10 @@ begin
             end
 
             operation_step <= 0;
+
+            //wrtie back data into storage, same 16bits address
+            wr_en <= 1;
+            addr <= buffer_storage_address+{proc_memory_addr_counter[31:1], 1'b0};
             proc_memory_addr_counter <= proc_memory_addr_counter+1;
 
             if(proc_counter_read > 2) begin // > 2 and not 0 because we are shifted by one
@@ -643,11 +649,12 @@ begin
          end
       end else if (data_read_valid == 1) begin
 
+         //data read will be written in conv. buffer at the end of writeback
          data_read_store <= data_read;
-         matrix_convolution_counter <= 0;
+         matrix_convolution_counter <= 0; //counts clk cycles for calulation
          state_processing <= STATE_PROC_CONVOLUTION_CALCULATION;
 
-         // //do the lookup before the calculation (will use the BRAMS! (yosys 0.9))
+         // //do the lookup before the calculation (will infer the sprams! (yosys 0.9))
          convolution_buffer_local[0][0] <= convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0]+1)%2];
          convolution_buffer_local[1][0] <= convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0]+1)%2];
          convolution_buffer_local[2][0] <= convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0]+1)%2];
@@ -667,13 +674,13 @@ begin
    STATE_PROC_CONVOLUTION_CALCULATION: begin : conv_proc
       reg [15:0] temp_calc; //used for calculations
 
-      //convolution for the first byte
+      //if we are on a border => write 0
       if(counter_convolution_y_write == 0 || counter_convolution_y_write >= img_height-1 || counter_convolution_x_write == 0) begin
          data_write[7:0] <= 0;
       end else begin
          temp_calc = 0;
 
-         // temp_calc = temp_calc + convolution_matrix[0]*data_read[7:0];
+
          if(matrix_convolution_counter == 0) begin
             temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer_local[0][0]};
             calc_left_buf <= temp_calc;
@@ -712,28 +719,20 @@ begin
          end else if (matrix_convolution_counter == 9) begin
             temp_calc = calc_left_buf;
          end
-         // temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0]+1)%2]};
-         // temp_calc = temp_calc + convolution_matrix[1]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0]+1)%2]};
-         // temp_calc = temp_calc + convolution_matrix[2]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0]+1)%2]};
-         // temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]-1][ (counter_convolution_y_write[0])]};
-         // temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0])]};
-         // temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0])]};
-         // //last line still not written to the buffer
-         // temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_previous_read[1][15:8]};
-         // temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_previous_read[0][7:0]};
-         // temp_calc = temp_calc + convolution_matrix[8]*{8'b0, convolution_previous_read[0][15:8]};
-
 
          temp_calc[7:0] = apply_clamp_fixed16(temp_calc, clamp);
          //convolution_data_to_add is either the value already existing at this address, or 0 (depends on param)
          data_write[7:0] <= apply_clamp({8'b0, convolution_data_to_add[7:0]}+{8'b0, temp_calc[7:0]}, 1);
       end
 
+      //if second byte value are on the border => 0
       if(counter_convolution_y_write == 0 || counter_convolution_y_write >= img_height-1 || counter_convolution_x_write >= img_width-2) begin
          data_write[15:8] <= 0;
       end else begin
 
          temp_calc = 0;
+
+         //starts at 1 because want to couple similar operations with the first byte calculation
          if(matrix_convolution_counter == 1) begin
             temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer_local[1][0]};
             calc_right_buf <= temp_calc;
@@ -769,16 +768,6 @@ begin
             temp_calc = calc_right_buf;
             temp_calc = temp_calc + convolution_matrix[8]*{8'b0, convolution_buffer_local[3][2]};
          end
-         // temp_calc = temp_calc + convolution_matrix[0]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0]+1)%2]};
-         // temp_calc = temp_calc + convolution_matrix[1]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0]+1)%2]};
-         // temp_calc = temp_calc + convolution_matrix[2]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0]+1)%2]};
-         // temp_calc = temp_calc + convolution_matrix[3]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]][ (counter_convolution_y_write[0])]};
-         // temp_calc = temp_calc + convolution_matrix[4]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+1][ (counter_convolution_y_write[0])]};
-         // temp_calc = temp_calc + convolution_matrix[5]*{8'b0, convolution_buffer[counter_convolution_x_write[7:0]+2][ (counter_convolution_y_write[0])]};
-         // //last line not in buffer
-         // temp_calc = temp_calc + convolution_matrix[6]*{8'b0, convolution_previous_read[0][7:0]};
-         // temp_calc = temp_calc + convolution_matrix[7]*{8'b0, convolution_previous_read[0][15:8]};
-         // temp_calc = temp_calc + convolution_matrix[8]*{8'b0, data_read[7:0]};
 
          temp_calc[7:0] = apply_clamp_fixed16(temp_calc, clamp);
          data_write[15:8] <= apply_clamp({8'b0, convolution_data_to_add[15:8]}+{8'b0, temp_calc[7:0]}, 1);
@@ -791,6 +780,8 @@ begin
       end
    end
    STATE_PROC_CONVOLUTION_WRITEBACK_1: begin
+      //stores last read in the buffer
+      //this is done in two states to infer a spram for the convolution buffer
       convolution_buffer[convolution_previous_read_counter_x[1][7:0]][convolution_previous_read_counter_y[1][0]] <= convolution_previous_read[1][7:0];
       state_processing <= STATE_PROC_CONVOLUTION_WRITEBACK_2;
    end
@@ -804,6 +795,7 @@ begin
       convolution_previous_read_counter_x[1] <= convolution_previous_read_counter_x[0];
       convolution_previous_read_counter_y[1] <= convolution_previous_read_counter_y[0];
 
+      //second write to conv. buffer (spram behaviour)
       convolution_buffer[convolution_previous_read_counter_x[1][7:0]+1][convolution_previous_read_counter_y[1][0]] <= convolution_previous_read[1][15:8];
 
       //counts the reads and increment y reg when x has sweept the width
@@ -815,7 +807,7 @@ begin
       end
 
       if(counter_convolution_y == 0 || (counter_convolution_y == 1 && counter_convolution_x == 0)) begin
-         //first/last lines and borders are 0
+         //ffirst line not wrtiten back, need delay to fill the convolution buffer
          wr_en <= 0;
       end else begin
          wr_en <= 1;
@@ -834,7 +826,6 @@ begin
 
       addr <= {proc_conv_memory_addr_write[31:1], 1'b0};
 
-      //will cause the next read
       proc_conv_memory_addr_read <= proc_conv_memory_addr_read + 1;
 
       convolution_reading_data <= 2'b00;

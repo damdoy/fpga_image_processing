@@ -29,7 +29,7 @@ The images are stored in a .h (done with gimp).
    - mult
 -- switch input and buffer
 
-### examples
+### Examples
 
 | Original  | ![original](examples/image_fruits_128.png) |
 | -------  | ------- |
@@ -38,7 +38,7 @@ The images are stored in a .h (done with gimp).
 | Gaussian  | ![gaussian](examples/cgaussian.png)  |
 | Edge detection  | ![edge_detect](examples/cedge_detection.png)   |
 
-### fixed points
+### Fixed point calculation
 
 Operations such as multiplication or convolutions require real numbers. For example the gaussian blur
 is implemented using a kernel whose sum is one, so each element of the kernel should be <= 1.0.
@@ -47,14 +47,14 @@ Real numbers are represented as fixed point numbers on 8 bits.
 The first bit is used as the sign bit, 3 bits for the numbers and 4 for the fractions.
 This means the values can go from -7.0 to 7.0 with a precision of 0.0625 (1/2^4).
 
-<!-- ### Commands
-- format: command+data_to_receive-data_to_send
-- set_params/init, command+width[15:0] height[15:0]-
-- send_image, command+image[width*height:0]-
-- read_image, command+-image[width*height:0]
-- get_status command+-status[31:0]
-- apply_add command+val[15:0]
-- threshold command+val[7:0]+replacement[7:0]+upper[0] (upper == 1 will replace everything >val with replacement) -->
+### Architecture
+
+Two modes of operation are possible: simulation with verilator or running on ice40 fpga.
+
+The specific files for these two modes are situated in the `simulation/` and `ice40/` folders.
+
+The two implementations of the image processing interface `software/image_processing.hpp` reflect this architecture by either communicating
+with the verlator class or the ice40 fpga via SPI.
 
 # Build & run
 
@@ -65,6 +65,20 @@ This means the values can go from -7.0 to 7.0 with a precision of 0.0625 (1/2^4)
 `./simu` Runs simulator
 
 `./run_gnuplot.sh` to display the output (`output.dat`) in gnuplot
+
+### ice40
+
+Tested with an ice40 ultraplus on a breakout board
+
+In `ice40/hdl/` create the bitstream by calling `make`
+
+Call `make prog` to program the `top.v` bitstream on the fpga
+
+To compile the host software, call `build_ice40.sh` in the root
+
+Call `soft_ice40` which will communicate with the fpga (send images, receive them)
+
+As with the simulation, `./run_gnuplot.sh` to display the output (`output.dat`) in gnuplot
 
 ## Needed tools
 

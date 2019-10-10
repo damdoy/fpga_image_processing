@@ -204,9 +204,9 @@ int main(){
    // test_add_threshold(image_input, image_output, img_proc);
    // test_binary_add(image_input, image_output, img_proc);
    // test_gaussian_blur(image_input, image_output, img_proc);
-   // test_simple_edge_detection(image_input, image_output, img_proc);
+   test_simple_edge_detection(image_input, image_output, img_proc);
    // test_multiplication(image_input, image_output, img_proc);
-   test_binary_diff(image_input, image_output, img_proc);
+   // test_binary_diff(image_input, image_output, img_proc);
 
    // test_simulation(image_input, image_output);
 
