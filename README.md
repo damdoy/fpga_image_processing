@@ -37,40 +37,40 @@ The images are stored in a .h (done with gimp).
     <thead>
         <tr>
             <th>Original</th>
-            <th>![original](examples/image_fruits_128.png)</th>
-            <th>![original](examples/peppers128.png)</th>
+            <th><img src="examples/image_fruits_128.png"></th>
+            <th><img src="examples/peppers128.png"></th>
         </tr>
     </thead>
     <tbody>
         <tr>
             <td>Add & threshold</td>
-            <td>![threshold](examples/fruits_add_threshold.png)</td>
-            <td>![threshold](examples/peppers_add_threshold.png)</td>
+            <td><img src="examples/fruits_add_threshold.png"></td>
+            <td><img src="examples/peppers_add_threshold.png">"</td>
         </tr>
         <tr>
             <td>Multiplication 0.5x</td>
-            <td>![mult](examples/fruits_mult.png)</td>
-            <td>![mult](examples/peppers_mult.png)</td>
+            <td><img src="examples/fruits_mult.png"></td>
+            <td><img src="examples/peppers_mult.png"></td>
         </tr>
         <tr>
             <td>Gaussian blur</td>
-            <td>![gaussian_blur](examples/fruits_gaussian.png)</td>
-            <td>![gaussian_blur](examples/peppers_gaussian.png)</td>
+            <td><img src="examples/fruits_gaussian.png"></td>
+            <td><img src="examples/peppers_gaussian.png"></td>
         </tr>
         <tr>
             <td>Edge detection</td>
-            <td>![edge](examples/fruits_edge_detection.png)</td>
-            <td>![edge](examples/peppers_edge_detection.png)</td>
+            <td><img src="examples/fruits_edge_detection.png"></td>
+            <td><img src="examples/peppers_edge_detection.png"></td>
         </tr>
         <tr>
             <td>Average  
             0.5\*fruits+0.5\*peppers</td>
-            <td colspan=2 align="center">![avg](examples/average.png)</td>
+            <td colspan=2 align="center"><img src="examples/average.png"></td>
         </tr>
         <tr>
             <td>Difference  
             abs(fruits-peppers)</td>
-            <td colspan=2 align="center">![diff](examples/diff.png)</td>
+            <td colspan=2 align="center"><img src="examples/diff.png"></td>
         </tr>
     </tbody>
 </table>
