@@ -23,21 +23,57 @@ The images are stored in a .h (done with gimp).
 - 3x3 matrix convolution
    - apply convolution on storage buffer, writes result back
    - apply convolution on input buffer, adds result with storage buffer.
-- combine input and buffer
+- binary operation (input *op* buffer)
    - add
    - sub
    - mult
--- switch input and buffer
+- switch input and buffer
+- load image to input
+- read image from input
 
 ### Examples
 
-| Original  | ![original](examples/image_fruits_128.png) |
-| -------  | ------- |
-| Add & threshold  | ![threshold](examples/cadd_threshold.png)  |
-| Multiplication 0.5x | ![mult](examples/cmult.png)  |
-| Gaussian  | ![gaussian](examples/cgaussian.png)  |
-| Edge detection  | ![edge_detect](examples/cedge_detection.png)   |
-
+<table>
+    <thead>
+        <tr>
+            <th>Original</th>
+            <th>![original](examples/image_fruits_128.png)</th>
+            <th>![original](examples/peppers128.png)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Add & threshold</td>
+            <td>![threshold](examples/fruits_add_threshold.png)</td>
+            <td>![threshold](examples/peppers_add_threshold.png)</td>
+        </tr>
+        <tr>
+            <td>Multiplication 0.5x</td>
+            <td>![mult](examples/fruits_mult.png)</td>
+            <td>![mult](examples/peppers_mult.png)</td>
+        </tr>
+        <tr>
+            <td>Gaussian blur</td>
+            <td>![gaussian_blur](examples/fruits_gaussian.png)</td>
+            <td>![gaussian_blur](examples/peppers_gaussian.png)</td>
+        </tr>
+        <tr>
+            <td>Edge detection</td>
+            <td>![edge](examples/fruits_edge_detection.png)</td>
+            <td>![edge](examples/peppers_edge_detection.png)</td>
+        </tr>
+        <tr>
+            <td>Average  
+            0.5\*fruits+0.5\*peppers</td>
+            <td colspan=2 align="center">![avg](examples/average.png)</td>
+        </tr>
+        <tr>
+            <td>Difference  
+            abs(fruits-peppers)</td>
+            <td colspan=2 align="center">![diff](examples/diff.png)</td>
+        </tr>
+    </tbody>
+</table>
 ### Fixed point calculation
 
 Operations such as multiplication or convolutions require real numbers. For example the gaussian blur
@@ -55,6 +91,28 @@ The specific files for these two modes are situated in the `simulation/` and `ic
 
 The two implementations of the image processing interface `software/image_processing.hpp` reflect this architecture by either communicating
 with the verlator class or the ice40 fpga via SPI.
+
+```
++---------------------+        +-----------------------+
+|                     |        |                       |
+|                     |        |                       |
+| main.cpp            +--------+ Image_processing.hpp  |
+|                     |        |                       |
+|                     |        |                       |
++---------------------+        +---------+-------------+
+                                         ^
+                                         |
+                            +------------+-----------+
+                            |                        |
++----------------+      +---------+-------------+  +-------+-----------+              +-----------+
+|                |      |                       |  |                   |              |           |
+| Verilator      |      | IP_simulation.hpp     |  | IP_ice40.hpp      |      SPI     | FPGA      |
+| Simulation     +------+ IP_simulation.cpp     |  | IP_ice40.cpp      +--------------+ Ice40     |
+| obj_dir/       |      |                       |  |                   |              |           |
+|                |      |                       |  |                   |              |           |
++----------------+      +-----------------------+  +-------------------+              +-----------+
+
+```
 
 # Build & run
 

@@ -2,6 +2,7 @@
 #include <queue>
 #include <stdint.h>
 
+// #include "images/peppers128.h"
 // #include "images/image_fruits_128.h"
 #include "images/image_fruits_64.h"
 // #include "images/image_fruits_16.h"
@@ -178,6 +179,45 @@ void test_binary_diff(uint8_t *image_input, uint8_t *image_output, Image_process
    img_proc->read_image(image_output);
 }
 
+void test_images_average(uint8_t *image_input1, uint8_t *image_input2, uint8_t *image_output, Image_processing *img_proc){
+   img_proc->send_params(image_width, image_height);
+   img_proc->send_image(image_input1); //in input buffer
+
+   img_proc->switch_buffers();
+
+   img_proc->send_image(image_input2);
+
+   img_proc->send_mult(0.5f, true);
+   img_proc->wait_end_busy();
+
+   img_proc->switch_buffers();
+
+   img_proc->send_mult(0.5f, true);
+   img_proc->wait_end_busy();
+
+   img_proc->send_binary_add(true);
+   img_proc->wait_end_busy();
+
+   img_proc->switch_buffers();
+   img_proc->read_image(image_output);
+}
+
+void test_images_diff(uint8_t *image_input1, uint8_t *image_input2, uint8_t *image_output, Image_processing *img_proc){
+   img_proc->send_params(image_width, image_height);
+   img_proc->send_image(image_input1); //in input buffer
+
+   img_proc->switch_buffers();
+
+   img_proc->send_image(image_input2);
+   img_proc->switch_buffers();
+
+   img_proc->send_binary_sub(true, true);
+   img_proc->wait_end_busy();
+
+   img_proc->switch_buffers();
+   img_proc->read_image(image_output);
+}
+
 int main(){
    FILE *output_file = fopen("output.dat", "w");
 
@@ -190,6 +230,7 @@ int main(){
    #endif
 
    uint8_t *image_input = new uint8_t[image_width*image_height];
+   uint8_t *image_input2 = new uint8_t[image_width*image_height];
    uint8_t *image_output = new uint8_t[image_width*image_height];
 
    const char *ptr_image = header_data;
@@ -199,6 +240,14 @@ int main(){
       image_input[i] = pixel[0];
    }
 
+   //load second image
+   // ptr_image = header_data2;
+   // for (size_t i = 0; i < image_height*image_width; i++) {
+   //    uint8_t pixel[3];
+   //    HEADER_PIXEL(ptr_image, pixel);
+   //    image_input2[i] = pixel[0];
+   // }
+
    //test selection
    // test_send_read(image_input, image_output, img_proc);
    // test_add_threshold(image_input, image_output, img_proc);
@@ -207,6 +256,8 @@ int main(){
    test_simple_edge_detection(image_input, image_output, img_proc);
    // test_multiplication(image_input, image_output, img_proc);
    // test_binary_diff(image_input, image_output, img_proc);
+   // test_images_average(image_input, image_input2, image_output, img_proc);
+   // test_images_diff(image_input, image_input2, image_output, img_proc);
 
    // test_simulation(image_input, image_output);
 

@@ -493,7 +493,7 @@ begin
          state <= STATE_WAIT_COMMAND;
          clamp <= comm_data_in[0];
          proc_counter_read <= img_width*img_height;
-         proc_memory_addr_counter <= 0; //offset
+         proc_memory_addr_counter <= buffer_storage_address;
       end
    end
    default: begin
