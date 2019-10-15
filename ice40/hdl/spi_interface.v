@@ -15,7 +15,7 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
                      output reg [7:0] spi_cmd, output reg [7:0] spi_data_out, output reg spi_data_out_valid, input [7:0] spi_data_in, input spi_data_in_valid,
                      output spi_data_in_free, output reg [2:0] led_debug);
 
-   parameter NOP=0, INIT=1, READ_DATA=2, RECEIVE_CMD=3, RECEIVE_DATA=4;
+   parameter NOP=0, INIT=1, READ_DATA=2, RECEIVE_CMD=3, RECEIVE_DATA=4, RECEIVE_DATA16=5;
 
    //state machine parameters
    parameter INIT_SPICR0=0, INIT_SPICR1=INIT_SPICR0+1, INIT_SPICR2=INIT_SPICR1+1, INIT_SPIBR=INIT_SPICR2+1, INIT_SPICSR=INIT_SPIBR+1,
@@ -52,7 +52,7 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
    reg is_spi_init; //waits the INIT command from the master
 
    reg [7:0] counter_read; //count the bytes to read to form a command
-   reg [7:0] command_data[7:0]; //the command, saved as array of bytes
+   reg [7:0] command_data[31:0]; //the command, saved as array of bytes
 
    reg [7:0] counter_send; //counts the bytes to send
    reg [7:0] data_to_send; //buffer for data to be written in send register
@@ -284,9 +284,14 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
                   // end
                end
             end
+            if( counter_read >= 1 && command_data[0] == RECEIVE_DATA16) begin
+               spi_data_out_valid <= 1;
+               spi_data_out <= spi_dato;
+            end
+
 
             //only 4 bytes of comm.
-            if(counter_read == 3) begin
+            if( (command_data[0] == RECEIVE_DATA16 && counter_read == 16) || (command_data[0] != RECEIVE_DATA16 && counter_read == 3 )) begin
                counter_read <= 0;
                counter_send <= 0;
             end

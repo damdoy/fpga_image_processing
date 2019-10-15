@@ -2,6 +2,7 @@
 #include <queue>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 #include "image_processing_ice40.hpp"
 
@@ -10,6 +11,7 @@
 #define SPI_READ_DATA 0x02
 #define SPI_SEND_CMD 0x03
 #define SPI_SEND_DATA 0x04
+#define SPI_SEND_DATA16 0x05
 
 Image_processing_ice40::Image_processing_ice40(){
 
@@ -65,11 +67,21 @@ void Image_processing_ice40::read_status(uint8_t *output){
 
 void Image_processing_ice40::send_image(uint8_t *image){
 
+   printf("sending..\n");
    spi_command_send(SPI_SEND_CMD, COMMAND_SEND_IMG);
-   for (size_t i = 0; i < image_width*image_height; i++) {
-      // usleep(1000);
-      spi_command_send(SPI_SEND_DATA, image[i]);
+
+   //fast send, 16 bytes per packet
+   uint8_t data_to_send[16];
+   for (size_t i = 0; i < image_width*image_height; i+=16) {
+      memcpy(data_to_send, image+i, 16);
+      spi_command_send_16B(SPI_SEND_DATA16, data_to_send);
    }
+
+   //sends byte by byte
+   // for (size_t i = 0; i < image_width*image_height; i++) {
+   //    // usleep(1000);
+   //    spi_command_send(SPI_SEND_DATA, image[i]);
+   // }
 }
 
 void Image_processing_ice40::send_add(int16_t value, bool clamp){
