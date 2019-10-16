@@ -11,7 +11,8 @@
 #define SPI_READ_DATA 0x02
 #define SPI_SEND_CMD 0x03
 #define SPI_SEND_DATA 0x04
-#define SPI_SEND_DATA16 0x05
+#define SPI_READ_DATA16 0x05
+#define SPI_SEND_DATA16 0x06
 
 Image_processing_ice40::Image_processing_ice40(){
 
@@ -70,18 +71,20 @@ void Image_processing_ice40::send_image(uint8_t *image){
    printf("sending..\n");
    spi_command_send(SPI_SEND_CMD, COMMAND_SEND_IMG);
 
+   uint image_size = image_width*image_height;
+
    //fast send, 16 bytes per packet
    uint8_t data_to_send[16];
-   for (size_t i = 0; i < image_width*image_height; i+=16) {
+   size_t i = 0;
+   for (i = 0; i < image_size; i+=16) {
       memcpy(data_to_send, image+i, 16);
       spi_command_send_16B(SPI_SEND_DATA16, data_to_send);
    }
 
-   //sends byte by byte
-   // for (size_t i = 0; i < image_width*image_height; i++) {
-   //    // usleep(1000);
-   //    spi_command_send(SPI_SEND_DATA, image[i]);
-   // }
+   //padding if image is not a multiple of the fast send
+   for (size_t j = 0; j < (image_size%16); j++) {
+      spi_command_send(SPI_SEND_DATA, image[i+j]);
+   }
 }
 
 void Image_processing_ice40::send_add(int16_t value, bool clamp){
@@ -140,18 +143,37 @@ void Image_processing_ice40::read_image(uint8_t* image_out){
 
    spi_command_send(SPI_SEND_CMD, COMMAND_READ_IMG);
 
-   uint8_t send_data[3]; //don't care
-   uint8_t recv_data[2];
+   uint8_t send_data[16]; //don't care
+   uint8_t recv_data[15];
    int counter_read = 0;
    while(counter_read < image_width*image_height) {
-      spi_command_send_recv(SPI_READ_DATA, send_data, recv_data);
-      printf("recv_data[0]: 0x%x\n", recv_data[0]);
-      if(recv_data[0]&1 == 1 && counter_read < image_width*image_height){
-         printf("recv data: 0x%x\n", recv_data[1]);
-         image_out[counter_read] = recv_data[1];
-         counter_read++;
+      spi_command_send_recv_16B(SPI_READ_DATA16, send_data, recv_data);
+      printf("recv_data[0] (status): 0x%x\n", recv_data[0]);
+      if(recv_data[0]&1 == 1){
+         for (size_t i = 1; i < 15; i++) {
+            //if we ask more pixels that the size of image (image not divisible by 15) then we will have garbage which we don't care
+            if(counter_read < image_width*image_height){
+               printf("recv data[%lu]: 0x%x\n", i,recv_data[i]);
+               image_out[counter_read] = recv_data[i];
+               counter_read++;
+            }
+         }
       }
    }
+   // spi_command_send(SPI_SEND_CMD, COMMAND_READ_IMG);
+   //
+   // uint8_t send_data[3]; //don't care
+   // uint8_t recv_data[2];
+   // int counter_read = 0;
+   // while(counter_read < image_width*image_height) {
+   //    spi_command_send_recv(SPI_READ_DATA, send_data, recv_data);
+   //    printf("recv_data[0]: 0x%x\n", recv_data[0]);
+   //    if(recv_data[0]&1 == 1 && counter_read < image_width*image_height){
+   //       printf("recv data: 0x%x\n", recv_data[1]);
+   //       image_out[counter_read] = recv_data[1];
+   //       counter_read++;
+   //    }
+   // }
 }
 
 void Image_processing_ice40::switch_buffers(){

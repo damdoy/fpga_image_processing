@@ -240,13 +240,6 @@ int spi_command_send_16B(uint8_t cmd, uint8_t data[16]){
    return spi_command_send_recv_16B(cmd, data, nop_param);
 }
 
-//send 32 bits
-//TODO => work with 3bytes
-// int spi_command_send_32(uint8_t cmd, uint32_t val32b){
-//    uint8_t param[7] = {val32b&0xff, (val32b>>8)&0xff, (val32b>>16)&0xff, (val32b>>24)&0xff, 0, 0, 0};
-//    return spi_command_send(cmd, param);
-// }
-
 int spi_command_send_recv(uint8_t cmd, uint8_t send_param[3], uint8_t recv_data[2])
 {
    uint8_t to_send[] = {cmd, send_param[0], send_param[1], send_param[2]};

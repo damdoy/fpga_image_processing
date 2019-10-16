@@ -392,7 +392,7 @@ begin
                counter_read <= counter_read - 1;
                memory_addr_counter <= memory_addr_counter+1;
                mem_data_buffer_full <= 0;
-               if(counter_read <= 1) begin // > 1 and not 0 because we are shifted by one
+               if(counter_read <= 1) begin // = 1 and not 0 because we are shifted by one
                   state <= STATE_WAIT_COMMAND;
                end
             end
