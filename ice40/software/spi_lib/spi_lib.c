@@ -233,11 +233,11 @@ int spi_command_send(uint8_t cmd, uint8_t param){
    return spi_command_send_recv(cmd, params, nop_param);
 }
 
-//sends 16bits
-int spi_command_send_16B(uint8_t cmd, uint8_t data[16]){
-   uint8_t nop_param[15]; //wont be returned
+//sends 32bits
+int spi_command_send_32B(uint8_t cmd, uint8_t data[32]){
+   uint8_t nop_param[31]; //wont be returned
 
-   return spi_command_send_recv_16B(cmd, data, nop_param);
+   return spi_command_send_recv_32B(cmd, data, nop_param);
 }
 
 int spi_command_send_recv(uint8_t cmd, uint8_t send_param[3], uint8_t recv_data[2])
@@ -261,22 +261,22 @@ int spi_command_send_recv(uint8_t cmd, uint8_t send_param[3], uint8_t recv_data[
 }
 
 //TODO merge with last function
-int spi_command_send_recv_16B(uint8_t cmd, uint8_t send_param[16], uint8_t recv_data[15])
+int spi_command_send_recv_32B(uint8_t cmd, uint8_t send_param[32], uint8_t recv_data[31])
 {
-   uint8_t to_send[17];
+   uint8_t to_send[33];
    uint retries = 0;
    uint max_retries = 10;
 
    do{
       to_send[0] = cmd;
-      memcpy(to_send+1, send_param, 16);
-      xfer_spi(to_send, 17);
+      memcpy(to_send+1, send_param, 32);
+      xfer_spi(to_send, 33);
       retries++;
    } while(retries < max_retries && (to_send[2] & STATUS_FPGA_RECV_MASK) == 0); //check that fpga really received the datas
 
    //copy data received to output
    //first 2 bytes are garbage, the third one is the status
-   memcpy(recv_data, to_send+2, 15);
+   memcpy(recv_data, to_send+2, 31);
 
    return retries >= max_retries;
 }

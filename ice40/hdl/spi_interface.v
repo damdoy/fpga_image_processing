@@ -3,7 +3,7 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
                      output reg [7:0] spi_cmd, output reg [7:0] spi_data_out, output reg spi_data_out_valid, input [7:0] spi_data_in, input spi_data_in_valid,
                      output spi_data_in_free, output reg [2:0] led_debug);
 
-   parameter NOP=0, INIT=1, SEND_DATA=2, RECEIVE_CMD=3, RECEIVE_DATA=4, SEND_DATA16=5, RECEIVE_DATA16=6;
+   parameter NOP=0, INIT=1, SEND_DATA=2, RECEIVE_CMD=3, RECEIVE_DATA=4, SEND_DATA32=5, RECEIVE_DATA32=6;
 
    //state machine parameters
    parameter INIT_SPICR0=0, INIT_SPICR1=INIT_SPICR0+1, INIT_SPICR2=INIT_SPICR1+1, INIT_SPIBR=INIT_SPICR2+1, INIT_SPICSR=INIT_SPIBR+1,
@@ -40,15 +40,11 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
    reg is_spi_init; //waits the INIT command from the master
 
    reg [7:0] counter_read; //count the bytes to read to form a command
-   reg [7:0] command_data[31:0]; //the command, saved as array of bytes
+   reg [7:0] command_data[63:0]; //the command, saved as array of bytes
 
    reg [7:0] counter_send; //counts the bytes to send
    reg [7:0] data_to_send; //buffer for data to be written in send register
    reg is_data_to_send;
-
-   //regs for the "vector" commands
-   reg [7:0] data_vector[15:0]; //4*32bits = 16*8bits
-   reg [3:0] counter_vector;
 
    reg [7:0] buffer_data_in; //keeps data from the image processing module to be send
    reg buffer_full;
@@ -67,7 +63,6 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
 
       is_spi_init = 0;
       counter_send = 0;
-      counter_vector = 0;
 
       buffer_full = 0;
 
@@ -154,7 +149,7 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
             end
 
             if (is_spi_init == 1 && spi_dato[3] == 1) begin
-               if( (command_data[0] != SEND_DATA16 && counter_send < 2) || (command_data[0] == SEND_DATA16 && counter_send < 15)) begin //can only send 2 bytes back
+               if( (command_data[0] != SEND_DATA32 && counter_send < 2) || (command_data[0] == SEND_DATA32 && counter_send < 31)) begin //can only send 2 bytes back
                   state_spi <= SPI_WAIT_TRANSMIT_READY;
                end else begin
                   state_spi <= SPI_READ_OPCODE;
@@ -241,7 +236,7 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
                   is_data_to_send <= 1;
                end
             end
-            if( counter_read == 0 && spi_dato == SEND_DATA16 ) begin
+            if( counter_read == 0 && spi_dato == SEND_DATA32 ) begin
                if(buffer_full == 1)begin
                   data_to_send <= buffer_data_in;
                   is_data_to_send <= 1;
@@ -258,11 +253,11 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
                end
             end
             if( counter_read >= 1 ) begin
-               if( command_data[0] == RECEIVE_DATA16 ) begin
+               if( command_data[0] == RECEIVE_DATA32 ) begin
                   spi_data_out_valid <= 1;
                   spi_data_out <= spi_dato;
                end
-               else if( command_data[0] == SEND_DATA16 && counter_read < 14) begin
+               else if( command_data[0] == SEND_DATA32 && counter_read < 30) begin
                   if(buffer_full == 1)begin
                      data_to_send <= buffer_data_in;
                      is_data_to_send <= 1;
@@ -270,8 +265,8 @@ module spi_interface(input clk, input spi_sck, input spi_ss, input spi_mosi, out
                end
             end
 
-            if( command_data[0] == RECEIVE_DATA16 || command_data[0] == SEND_DATA16 ) begin
-               if( counter_read == 16 ) begin
+            if( command_data[0] == RECEIVE_DATA32 || command_data[0] == SEND_DATA32 ) begin
+               if( counter_read == 32 ) begin
                   counter_read <= 0;
                   counter_send <= 0;
                end
