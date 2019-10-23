@@ -1,16 +1,10 @@
-# fpga_image_processing (WIP)
+# fpga_image_processing
 
-Implementation of simple image processing operations in verilog. This project revolves around a central image processing module `image_processing.v` which can be included in a simulation environment using verilator or it can be included in a `top.v` for the ice40 Ultraplus fpga.
+Implementation of simple image processing operations in verilog. This project revolves around a central image processing module `image_processing.v` which can be included in a simulation environment using verilator or it can be included in a `top.v` for the ice40 Ultraplus fpga. Both case are implemented in the `simulation/` and `ice40/` folders.
 
 As it is targeted to low end fpga devices (both in price and power consumption) such as the ice40 ultraplus. It uses 1Mbit of ram to store the images into
 two buffers, the input and the storage buffer.
-Images are loaded and read in the input buffer, the calculations are done on the storage buffer. The two buffers can be swapped.
-
-Operations requiring two images (add, sub) will use the two buffers.
-
-The software communicates with the simulated fpga controller via a communication channel and will respond to memory access.
-
-The goal in the future is to have the communication channel done with a SPI module and the memory access with the memory available to the ice40 fpga.
+Images are loaded and read in the input buffer, the calculations are done on the storage buffer. The two buffers can be swapped. Most operations will be done in the storage buffer, if an operation is applied on the two images (for example binary_add), the resulting image will be written in the storage buffer.
 
 The images are stored in a .h (done with gimp).
 
@@ -74,6 +68,30 @@ The images are stored in a .h (done with gimp).
         </tr>
     </tbody>
 </table>
+
+### Commands
+
+The image processing module receives messages separated into blocks of 8bits values
+a message is composed of a 1B operand and the parameters which can be of variable length (from 0 to n).
+
+The commands are listed as an enum in `software/image_processing.h`
+
+| Command name | Content | Description |
+|-----|-----|-----|
+|COMMAND_PARAM | byte0:width LSB<br>byte1:width MSB<br>byte2:height LSB<br>byte3:height MSB | This is the first command to be sent to the IP module, will do some init and sets the image size, sizes are given as unsigned 16bits numbers, in little endian |
+|COMMAND_SEND_IMG | width*height bytes data | Sends the image to the module, image will be stored in input buffer |
+|COMMAND_GET_STATUS | none | Returns some status on the module, 4 bytes will be returned of which only the bit0 of byte0 is useful (for now) which tells if module is busy or not |
+|COMMAND_READ_IMG | none | Will receive the image data, which will be image_width*image_height bytes. The sizes are the ones given with the COMMAND_PARAM |
+|COMMAND_APPLY_ADD | byte0: add value LSB<br>byte1: add value MSB<br> byte2: bit0: clamp | Ask the module to do an add, image+value, the value is a 16bits signed value, the last parameter is the clamp, if set to one, it will clamp the result between 0 and 255, and avoid cyclic overflow |
+|COMMAND_APPLY_THRESHOLD | byte0: thresholding value<br>byte1: replacement value<br>byte2: bit0: upper selection of threshold | Will replace pixels in the resulting image if they satisfy the thresholding, if upper selection is 1, this means that every pixels >= to thresh_val will be set to replacement, otherwise it will replace every pixels <= thresh_val |
+|COMMAND_SWITCH_BUFFERS | none | Images in input and storage buffers will be switched |
+|COMMAND_BINARY_ADD | byte0: bit0: clamp | Adds input pixels with storage and store result in storage, clamp parameter will prevent values going over 255 or under 0 and be cyclic |
+|COMMAND_APPLY_INVERT | none | Will invert image in storage buffer, inversion means that the new image will have pixels = 255 - storage_pixels |
+|COMMAND_CONVOLUTION | byte0: bit0 clamp bit1: source input bit2: add to result<br> bytes 1 to 9: 3x3 convolution matrix byte as a 8bit fixed point value, in row major format (first 3 bytes are for first row) | Will do a convolution of the image with the 3x3 matrix. The border pixels will not be evaluated (set at 0). Format of the kernel matrix is in 8bit fixed point: 1bit sign, 3bits integers, 4bits fractions.<br> The convolution will normally be applied on the image in storage buffer and the result will be written in the same buffer. However the convolution can be applied on the input buffer by setting the source_input bit. By setting the add_to_result bit, the convolution result will be added to the content of the storage buffer instead of overwriting it, this is useful for edge detection (multiple kernels on different gradients orientation) |
+|COMMAND_BINARY_SUB | byte0: bit0: clamp, bit1 is absolute difference | Will do image input - image storage and store the result in storage. If bit1 is active, will do the absolute difference between input and storage |
+|COMMAND_BINARY_MULT | byte0: bit0: clamp | Will do input*storage and store the image in storage |
+|COMMAND_APPLY_MULT | byte0: fixed point multiplication value to by applied on image<br> byte1: bit0: clamp  | Will apply the multiplication value in fixed point format (1 sign, 3 units, 4 fractionnal) to be applied on the storage buffer, will store the result in storage |
+
 ### Fixed point calculation
 
 Operations such as multiplication or convolutions require real numbers. For example the gaussian blur

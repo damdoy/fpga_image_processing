@@ -311,17 +311,17 @@ begin
       if(comm_data_out_free == 1) begin
          if(counter_read == 3) begin //first status response is "is_busy"
             comm_data_out_valid <= 1;
-            comm_data_out[7:0] <= 8'h11;
+            comm_data_out[7:0] <= 8'h0;
             comm_data_out[0] <= ~(state_processing == STATE_IDLE);
          end else if(counter_read == 2) begin
             comm_data_out_valid <= 1;
-            comm_data_out[7:0] <= 8'h22;
+            comm_data_out[7:0] <= 8'h0;
          end else if(counter_read == 1) begin
             comm_data_out_valid <= 1;
-            comm_data_out[7:0] <= 8'h33;
+            comm_data_out[7:0] <= 8'h0;
          end else begin
             comm_data_out_valid <= 1;
-            comm_data_out[7:0] <= 8'h44;
+            comm_data_out[7:0] <= 8'h0;
          end
 
          if(counter_read > 0) begin
