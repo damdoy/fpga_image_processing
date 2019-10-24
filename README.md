@@ -1,4 +1,4 @@
-# fpga_image_processing
+# FPGA Image Processing
 
 Implementation of simple image processing operations in verilog. This project revolves around a central image processing module `image_processing.v` which can be included in a simulation environment using verilator or it can be included in a `top.v` for the ice40 Ultraplus fpga. Both case are implemented in the `simulation/` and `ice40/` folders.
 
@@ -132,6 +132,24 @@ with the verlator class or the ice40 fpga via SPI.
 
 ```
 
+### ice40 SPI communication
+
+When using the image processing module in ice40 mode it communicates with the ice40 using the SPI interface, to send and receive commands.
+
+The linux host computer will use the ftdi lib to communicate with the ftdi chip on the breakout board. The Ice40 will use the hardware SPI module.
+
+The format of SPI packets as seen from the programmer is one SPI command, one byte, the spi command will be read by the spi module and the byte will be forwarded to the IP module. The exception to this rule is sending and reading images, where the spi packets are bigger to accelerate throughput.
+
+The SPI commands are different from the image processing commands.
+
+Here are the possible SPI commands:
+- SPI_INIT: first command to be sent to the fpga, should contain {0, 0, 0x11} as body
+- SPI_READ_DATA: reads two bytes from fpga, first one is status (its first bit is high if there is a valid value), second one is the data itself
+- SPI_SEND_CMD: sends a image processing command (such as COMMAND_APPLY_ADD) to the fpga
+- SPI_SEND_DATA: sends a byte to the fpga, normally after a command for parameters
+- SPI_READ_DATA32: sends 32bytes to the fpga (used for images send)
+- SPI_SEND_DATA32: reads 32bytes from the fpga (first byte is status)
+
 # Build & run
 
 ### Simulation
@@ -158,8 +176,7 @@ As with the simulation, `./run_gnuplot.sh` to display the output (`output.dat`) 
 
 ## Needed tools
 
-Verilator 3.874
-
-gnuplot 5.0
-
-yosys 0.9
+- Verilator 3.874
+- gnuplot 5.0
+- yosys 0.9  
+- FTDI lib to build the ice40 host software (libftdi-lib0.20)
